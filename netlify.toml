@@ -1,0 +1,22 @@
+# Konfigurasi Deployment Netlify untuk SIM-ETIKET IT RSUD LABUHA
+
+[build]
+  # Folder frontend yang akan dipublish sebagai website statis di Netlify
+  publish = "public"
+
+# CATATAN ARSITEKTUR:
+# Netlify adalah hosting frontend (HTML/CSS/JS statis).
+# Backend Node.js (server.js), database SQLite (etiket.db), dan Socket.io
+# perlu dijalankan di server backend (misalnya Render, Railway, atau VPS RSUD).
+# Setelah backend Anda online, uncomment aturan redirect di bawah dan ganti URL targetnya:
+
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://backend-etiket-anda.onrender.com/api/:splat"
+#   status = 200
+#   force = true
+
+# [[redirects]]
+#   from = "/*"
+#   to = "/index.html"
+#   status = 200

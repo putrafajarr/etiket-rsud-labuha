@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables & secrets
+.env
+.env.local
+
+# Android build outputs & Gradle cache
+android/.gradle/
+android/build/
+android/app/build/
+android/captures/
+.gradle/
+local.properties
+*.apk
+*.aab
+
+# SQLite Database (uncomment if you want fresh DB in production)
+# server/etiket.db
+
+# Uploaded complaint attachments
+server/uploads/*
+!server/uploads/.gitkeep
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log

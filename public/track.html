@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Lacak Status Tiket - RSUD LABUHA</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0284c7">
+  <!-- iOS Safari Web App Support -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ETIKET RSUD">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="/css/custom.css">
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen pb-12">
+
+  <!-- Header RSUD Labuha -->
+  <header class="bg-gradient-to-r from-sky-700 via-sky-600 to-teal-600 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-2xl mx-auto px-3.5 sm:px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
+      <div class="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
+        <a href="/" class="w-9 h-9 sm:w-11 sm:h-11 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center font-bold text-lg sm:text-xl border border-white/30 shrink-0 shadow-sm">
+          🏥
+        </a>
+        <div class="min-w-0">
+          <h1 class="font-black text-sm sm:text-base leading-tight tracking-wide truncate">RSUD LABUHA</h1>
+          <p class="text-[10px] sm:text-xs text-sky-100 truncate">Pelacakan Status Perbaikan IT</p>
+        </div>
+      </div>
+      <a href="/lapor.html" class="inline-flex items-center text-[11px] sm:text-xs bg-white text-sky-800 hover:bg-sky-50 px-3 py-1.5 sm:py-2 rounded-xl font-bold transition shadow-sm active:scale-95 shrink-0">
+        <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i>
+        <span>Buat Laporan</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-2xl mx-auto px-3 sm:px-4 py-3 sm:py-6">
+    <!-- Search Box -->
+    <div class="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200">
+      <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+        Masukkan Nomor Tiket Anda
+      </label>
+      <div class="flex flex-col sm:flex-row gap-2">
+        <div class="relative flex-1">
+          <i data-lucide="ticket" class="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400"></i>
+          <input type="text" id="ticketInput" placeholder="Contoh: TKT-202611-0001" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 font-mono text-base sm:text-sm uppercase outline-none shadow-sm">
+        </div>
+        <button onclick="searchTicket()" class="px-5 py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-sm transition flex items-center justify-center space-x-1.5 shadow-md shadow-sky-600/20 active:scale-95">
+          <i data-lucide="search" class="w-4 h-4"></i>
+          <span>Cari Tiket</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingBox" class="hidden text-center py-12">
+      <div class="inline-block animate-spin text-3xl text-sky-600 mb-2">🔄</div>
+      <p class="text-xs font-semibold text-slate-500">Mencari data tiket...</p>
+    </div>
+
+    <!-- Ticket Detail Card -->
+    <div id="ticketDetailCard" class="hidden mt-6 bg-white rounded-2xl shadow-xl border border-slate-200/90 overflow-hidden">
+      <!-- Status Banner -->
+      <div id="statusBanner" class="p-5 bg-sky-600 text-white flex items-center justify-between">
+        <div>
+          <span class="text-[11px] font-semibold text-white/80 uppercase tracking-wider">Status Pengerjaan</span>
+          <h2 id="ticketStatusTitle" class="text-xl font-black tracking-wide uppercase mt-0.5">OPEN</h2>
+        </div>
+        <div id="priorityBadge" class="px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs font-bold uppercase tracking-wider border border-white/30">
+          Sedang
+        </div>
+      </div>
+
+      <!-- Ticket Core Info -->
+      <div class="p-6 space-y-5">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+          <div>
+            <span class="text-xs text-slate-400 font-semibold uppercase">Nomor Tiket</span>
+            <p id="dispTicketNo" class="text-lg font-bold font-mono text-sky-700"></p>
+          </div>
+          <div class="text-right">
+            <span class="text-xs text-slate-400 font-semibold uppercase">Tanggal Lapor</span>
+            <p id="dispDate" class="text-xs font-bold text-slate-700"></p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 text-xs">
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-slate-400 block mb-0.5">Ruangan / Unit:</span>
+            <span id="dispRoom" class="font-bold text-slate-800 text-sm"></span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-slate-400 block mb-0.5">Kategori Kendala:</span>
+            <span id="dispCategory" class="font-bold text-slate-800 text-sm"></span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-slate-400 block mb-0.5">Pelapor:</span>
+            <span id="dispReporter" class="font-bold text-slate-800 text-sm"></span>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <span class="text-slate-400 block mb-0.5">Teknisi Penanggung Jawab:</span>
+            <span id="dispTech" class="font-bold text-slate-800 text-sm text-sky-700"></span>
+          </div>
+        </div>
+
+        <!-- Uraian Keluhan -->
+        <div class="bg-sky-50/50 p-4 rounded-xl border border-sky-100">
+          <span class="text-xs font-bold text-sky-900 block mb-1">Keluhan:</span>
+          <p id="dispTitle" class="text-sm font-semibold text-slate-800"></p>
+          <p id="dispDesc" class="text-xs text-slate-600 mt-1 leading-relaxed"></p>
+        </div>
+
+        <!-- Foto Kendala & Bukti Perbaikan -->
+        <div id="photosSection" class="hidden space-y-3">
+          <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Foto Terlampir</span>
+          <div class="grid grid-cols-2 gap-3">
+            <div id="issuePhotoContainer" class="hidden">
+              <span class="text-[11px] text-slate-500 block mb-1">Foto Kendala Awal:</span>
+              <img id="issuePhoto" src="" class="rounded-xl border h-36 w-full object-cover shadow-sm cursor-pointer" onclick="window.open(this.src)">
+            </div>
+            <div id="proofPhotoContainer" class="hidden">
+              <span class="text-[11px] text-emerald-700 font-semibold block mb-1">Bukti Selesai Diperbaiki:</span>
+              <img id="proofPhoto" src="" class="rounded-xl border border-emerald-200 h-36 w-full object-cover shadow-sm cursor-pointer" onclick="window.open(this.src)">
+            </div>
+          </div>
+        </div>
+
+        <!-- Rating Section (Shown if Resolved) -->
+        <div id="ratingSection" class="hidden bg-amber-50/70 p-5 rounded-2xl border border-amber-200 text-center space-y-3">
+          <div class="w-10 h-10 bg-amber-500 text-white rounded-full flex items-center justify-center mx-auto text-lg">
+            ⭐
+          </div>
+          <div>
+            <h4 class="font-bold text-slate-800 text-sm">Bagaimana Pelayanan Teknisi IT Kami?</h4>
+            <p class="text-xs text-slate-500 mt-0.5">Beri penilaian kepuasan agar kami terus berbenah</p>
+          </div>
+
+          <div id="starContainer" class="flex justify-center space-x-2 text-2xl py-1 cursor-pointer">
+            <span onclick="setStar(1)" class="star hover:scale-125 transition text-slate-300">★</span>
+            <span onclick="setStar(2)" class="star hover:scale-125 transition text-slate-300">★</span>
+            <span onclick="setStar(3)" class="star hover:scale-125 transition text-slate-300">★</span>
+            <span onclick="setStar(4)" class="star hover:scale-125 transition text-slate-300">★</span>
+            <span onclick="setStar(5)" class="star hover:scale-125 transition text-slate-300">★</span>
+          </div>
+
+          <div id="ratingForm" class="hidden space-y-2 mt-2">
+            <input type="text" id="ratingFeedback" placeholder="Komentar atau ucapan untuk teknisi (Opsional)..." class="w-full text-xs px-3 py-2 rounded-xl border border-amber-300 focus:ring-2 focus:ring-amber-500 bg-white">
+            <button onclick="submitRating()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-amber-600/20">
+              Kirim Penilaian Kepuasan
+            </button>
+          </div>
+
+          <div id="ratingSubmittedAlert" class="hidden text-xs text-emerald-700 font-bold">
+            ✓ Terima kasih atas penilaian bintang Anda!
+          </div>
+        </div>
+
+        <!-- Activity Log Timeline -->
+        <div class="border-t border-slate-100 pt-5">
+          <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center">
+            <i data-lucide="history" class="w-4 h-4 mr-1.5 text-sky-600"></i> Riwayat Progres Penanganan
+          </h4>
+          <div id="timelineList" class="relative pl-6 space-y-4 border-l-2 border-slate-200 text-xs">
+            <!-- Timeline items injected dynamically -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let currentTicket = null;
+    let selectedRating = 0;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      const params = new URLSearchParams(window.location.search);
+      const ticketParam = params.get('ticket');
+      if (ticketParam) {
+        document.getElementById('ticketInput').value = ticketParam;
+        searchTicket();
+      }
+    });
+
+    async function searchTicket() {
+      const input = document.getElementById('ticketInput').value.trim();
+      if (!input) return;
+
+      document.getElementById('loadingBox').classList.remove('hidden');
+      document.getElementById('ticketDetailCard').classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/tickets/${encodeURIComponent(input)}`);
+        if (!res.ok) throw new Error('Tiket tidak ditemukan. Periksa kembali nomor tiket Anda.');
+
+        const data = await res.json();
+        renderTicket(data.ticket, data.logs);
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Tidak Ditemukan',
+          text: err.message,
+          confirmButtonColor: '#0284c7'
+        });
+      } finally {
+        document.getElementById('loadingBox').classList.add('hidden');
+      }
+    }
+
+    function renderTicket(ticket, logs) {
+      currentTicket = ticket;
+      document.getElementById('ticketDetailCard').classList.remove('hidden');
+
+      document.getElementById('dispTicketNo').textContent = ticket.ticket_no;
+      document.getElementById('dispDate').textContent = new Date(ticket.created_at).toLocaleString('id-ID');
+      document.getElementById('dispRoom').textContent = ticket.room_name;
+      document.getElementById('dispCategory').textContent = ticket.category_name;
+      document.getElementById('dispReporter').textContent = ticket.reporter_name;
+      document.getElementById('dispTech').textContent = ticket.assigned_to_name || 'Menunggu Penugasan';
+      document.getElementById('dispTitle').textContent = ticket.title;
+      document.getElementById('dispDesc').textContent = ticket.description;
+
+      // Status Banner Color
+      const banner = document.getElementById('statusBanner');
+      const statusTitle = document.getElementById('ticketStatusTitle');
+      const colors = {
+        open: { bg: 'bg-rose-600', text: 'TIKET TERBUKA (MENUNGGU)' },
+        assigned: { bg: 'bg-amber-600', text: 'DITUGASKAN KE TEKNISI' },
+        in_progress: { bg: 'bg-sky-600', text: 'SEDANG DALAM PENGERJAAN' },
+        pending: { bg: 'bg-purple-600', text: 'PENDING (SPAREPART/VENDOR)' },
+        resolved: { bg: 'bg-emerald-600', text: 'SELESAI DIPERBAIKI' },
+        closed: { bg: 'bg-slate-700', text: 'TIKET DITUTUP' }
+      };
+
+      const currentStatus = colors[ticket.status] || { bg: 'bg-sky-600', text: ticket.status.toUpperCase() };
+      banner.className = `p-5 text-white flex items-center justify-between ${currentStatus.bg}`;
+      statusTitle.textContent = currentStatus.text;
+
+      // Priority Badge
+      const priorityBadge = document.getElementById('priorityBadge');
+      priorityBadge.textContent = 'PRIORITAS: ' + (ticket.priority || 'SEDANG').toUpperCase();
+
+      // Photos
+      const photosSection = document.getElementById('photosSection');
+      const issuePhotoContainer = document.getElementById('issuePhotoContainer');
+      const proofPhotoContainer = document.getElementById('proofPhotoContainer');
+
+      let hasPhotos = false;
+      if (ticket.photo_url) {
+        document.getElementById('issuePhoto').src = ticket.photo_url;
+        issuePhotoContainer.classList.remove('hidden');
+        hasPhotos = true;
+      } else {
+        issuePhotoContainer.classList.add('hidden');
+      }
+
+      if (ticket.proof_photo_url) {
+        document.getElementById('proofPhoto').src = ticket.proof_photo_url;
+        proofPhotoContainer.classList.remove('hidden');
+        hasPhotos = true;
+      } else {
+        proofPhotoContainer.classList.add('hidden');
+      }
+
+      if (hasPhotos) photosSection.classList.remove('hidden');
+      else photosSection.classList.add('hidden');
+
+      // Rating Section
+      const ratingSec = document.getElementById('ratingSection');
+      if (ticket.status === 'resolved' || ticket.status === 'closed') {
+        ratingSec.classList.remove('hidden');
+        if (ticket.satisfaction_rating) {
+          showSubmittedRating(ticket.satisfaction_rating);
+        } else {
+          resetRatingStars();
+        }
+      } else {
+        ratingSec.classList.add('hidden');
+      }
+
+      // Render Logs
+      const timeline = document.getElementById('timelineList');
+      timeline.innerHTML = '';
+      if (logs && logs.length > 0) {
+        logs.forEach(l => {
+          const item = document.createElement('div');
+          item.className = 'relative';
+          item.innerHTML = `
+            <div class="absolute -left-[31px] top-0 w-3.5 h-3.5 rounded-full bg-sky-600 border-2 border-white ring-2 ring-sky-100"></div>
+            <div class="flex justify-between items-center mb-0.5">
+              <span class="font-bold text-slate-800 text-xs">${l.action}</span>
+              <span class="text-[10px] text-slate-400">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <p class="text-slate-600">${l.notes || '-'}</p>
+            <span class="text-[10px] text-slate-400 mt-0.5 block">Oleh: ${l.user_name}</span>
+          `;
+          timeline.appendChild(item);
+        });
+      } else {
+        timeline.innerHTML = '<p class="text-slate-400">Belum ada riwayat aktivitas tambahan.</p>';
+      }
+
+      lucide.createIcons();
+    }
+
+    function setStar(rating) {
+      if (currentTicket && currentTicket.satisfaction_rating) return;
+      selectedRating = rating;
+      const stars = document.querySelectorAll('.star');
+      stars.forEach((s, idx) => {
+        if (idx < rating) {
+          s.classList.remove('text-slate-300');
+          s.classList.add('text-amber-400');
+        } else {
+          s.classList.remove('text-amber-400');
+          s.classList.add('text-slate-300');
+        }
+      });
+      document.getElementById('ratingForm').classList.remove('hidden');
+    }
+
+    function resetRatingStars() {
+      const stars = document.querySelectorAll('.star');
+      stars.forEach(s => {
+        s.classList.remove('text-amber-400');
+        s.classList.add('text-slate-300');
+      });
+      document.getElementById('ratingForm').classList.add('hidden');
+      document.getElementById('ratingSubmittedAlert').classList.add('hidden');
+    }
+
+    function showSubmittedRating(rating) {
+      const stars = document.querySelectorAll('.star');
+      stars.forEach((s, idx) => {
+        if (idx < rating) {
+          s.classList.add('text-amber-400');
+          s.classList.remove('text-slate-300');
+        } else {
+          s.classList.remove('text-amber-400');
+          s.classList.add('text-slate-300');
+        }
+      });
+      document.getElementById('ratingForm').classList.add('hidden');
+      document.getElementById('ratingSubmittedAlert').classList.remove('hidden');
+    }
+
+    async function submitRating() {
+      if (!currentTicket || !selectedRating) return;
+      const feedback = document.getElementById('ratingFeedback').value.trim();
+
+      try {
+        const res = await fetch(`/api/tickets/${currentTicket.id}/rate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: selectedRating, feedback })
+        });
+        if (!res.ok) throw new Error('Gagal menyimpan penilaian');
+
+        Swal.fire({
+          icon: 'success',
+          title: 'Terima Kasih!',
+          text: 'Penilaian kepuasan Anda telah berhasil disimpan.',
+          confirmButtonColor: '#0284c7'
+        });
+
+        currentTicket.satisfaction_rating = selectedRating;
+        showSubmittedRating(selectedRating);
+      } catch (err) {
+        Swal.fire({
+          icon: 'error',
+          title: 'Gagal',
+          text: err.message,
+          confirmButtonColor: '#0284c7'
+        });
+      }
+    }
+  </script>
+</body>
+</html>
+

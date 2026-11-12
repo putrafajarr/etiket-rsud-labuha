@@ -1,0 +1,41 @@
+{
+  "name": "E-Tiket IT RSUD Labuha",
+  "short_name": "ETIKET RSUD",
+  "description": "Sistem Informasi E-Tiket Helpdesk IT & SIMRS RSUD Labuha, Halmahera Selatan",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0284c7",
+  "theme_color": "#0284c7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lapor Kendala Cepat",
+      "short_name": "Lapor",
+      "description": "Formulir Pelaporan Kendala IT Ruangan",
+      "url": "/lapor.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lacak Status Tiket",
+      "short_name": "Lacak",
+      "description": "Lacak progres perbaikan tiket",
+      "url": "/track.html",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
+

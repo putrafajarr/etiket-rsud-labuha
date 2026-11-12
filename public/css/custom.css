@@ -1,0 +1,121 @@
+/* SIM-ETIKET RSUD LABUHA Custom Styling */
+:root {
+  --primary: #0284c7;
+  --primary-dark: #0369a1;
+  --secondary: #0d9488;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Emergency ticket pulse animation */
+@keyframes pulse-critical {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+}
+
+.ticket-critical {
+  border-left: 5px solid #dc2626 !important;
+  animation: pulse-critical 2s infinite;
+}
+
+.ticket-high {
+  border-left: 5px solid #ea580c !important;
+}
+
+.ticket-medium {
+  border-left: 5px solid #d97706 !important;
+}
+
+.ticket-low {
+  border-left: 5px solid #2563eb !important;
+}
+
+/* Kanban column styling */
+.kanban-col {
+  min-height: 550px;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Badge SLA timer */
+.sla-badge-safe {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+.sla-badge-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.sla-badge-breached {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  animation: blink-text 1.5s infinite;
+}
+
+@keyframes blink-text {
+  50% { opacity: 0.6; }
+}
+
+/* Print specific rules */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* Mobile & Touch Screen Optimizations */
+@media (max-width: 768px) {
+  /* Prevent browser auto-zoom on input focus */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Kanban columns on mobile fit content naturally without huge empty scrolling */
+  .kanban-col {
+    min-height: auto !important;
+    max-height: none !important;
+    overflow-y: visible !important;
+  }
+
+  /* Safe touch target heights */
+  button, a, input, select {
+    touch-action: manipulation;
+  }
+
+  /* Smooth horizontal scrolling for tables on mobile */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Tap highlight removal for native feel */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+

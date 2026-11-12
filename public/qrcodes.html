@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Cetak Stiker QR Code Ruangan - RSUD LABUHA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @page {
+      size: A4;
+      margin: 10mm;
+    }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff !important; }
+      .sticker-card { break-inside: avoid; page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 p-6 min-h-screen">
+
+  <!-- Top Action Bar (hidden on print) -->
+  <div class="no-print max-w-5xl mx-auto mb-6 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div>
+        <h1 class="font-bold text-slate-800 text-base">Stiker QR Code Ruangan RSUD Labuha</h1>
+        <p class="text-xs text-slate-500">Cetak stiker ini dan tempelkan di setiap meja komputer/dinding ruangan/poli rumah sakit.</p>
+      </div>
+      <div class="flex space-x-2">
+        <a href="/" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
+          ← Kembali ke Dashboard
+        </a>
+        <button onclick="window.print()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-sky-600/20">
+          <i data-lucide="printer" class="w-4 h-4"></i>
+          <span>Cetak Semua Stiker (Print / PDF)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- IP Server / Host Settings Bar -->
+    <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="font-bold text-sky-900">🌐 Alamat Server di Barcode:</span>
+        <input type="text" id="customHostInput" placeholder="Memuat IP Wi-Fi..." class="px-3 py-1.5 bg-white border border-sky-300 rounded-lg font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500 text-xs w-56">
+        <button onclick="loadQRCodes()" class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg transition text-xs shadow-sm">Perbarui QR</button>
+      </div>
+      <div class="text-[11px] text-sky-800 font-medium">
+        ✓ Menggunakan IP Wi-Fi agar HP bisa langsung scan & lapor.
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div id="loading" class="text-center py-20">
+    <div class="inline-block animate-spin text-3xl text-sky-600 mb-2">🔄</div>
+    <p class="text-xs font-bold text-slate-500">Sedang membuat QR Code seluruh ruangan RSUD Labuha...</p>
+  </div>
+
+  <!-- Sticker Grid Container (Formatted for A4) -->
+  <div id="stickerGrid" class="hidden max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-4">
+    <!-- QR Sticker Cards injected dynamically -->
+  </div>
+
+  <script>
+    async function loadQRCodes() {
+      const grid = document.getElementById('stickerGrid');
+      const loading = document.getElementById('loading');
+      grid.classList.add('hidden');
+      loading.classList.remove('hidden');
+
+      const customHost = document.getElementById('customHostInput').value.trim();
+      let url = '/api/rooms/all/qrcodes';
+      if (customHost) {
+        url += `?customHost=${encodeURIComponent(customHost)}`;
+      }
+
+      try {
+        const res = await fetch(url);
+        const rooms = await res.json();
+
+        if (rooms.length > 0 && !customHost) {
+          // Extract host from first room reportUrl
+          try {
+            const parsed = new URL(rooms[0].reportUrl);
+            document.getElementById('customHostInput').value = parsed.host;
+          } catch (e) {}
+        }
+
+        grid.innerHTML = '';
+        rooms.forEach(r => {
+          const card = document.createElement('div');
+          card.className = 'sticker-card bg-white border-2 border-slate-800 rounded-2xl p-4 text-center flex flex-col items-center justify-between shadow-sm relative overflow-hidden';
+          card.innerHTML = `
+            <div class="w-full pb-2 mb-2 border-b-2 border-slate-800 flex items-center justify-between">
+              <span class="font-black text-xs tracking-wider text-slate-900">RSUD LABUHA</span>
+              <span class="text-[9px] font-bold bg-sky-600 text-white px-2 py-0.5 rounded uppercase">IT HELPDESK</span>
+            </div>
+
+            <div class="my-1">
+              <img src="${r.qrDataUrl}" alt="${r.code}" class="w-40 h-40 mx-auto rounded-lg">
+            </div>
+
+            <div class="w-full mt-2 pt-2 border-t border-slate-200">
+              <h3 class="font-black text-slate-900 text-sm leading-tight uppercase">${r.name}</h3>
+              <p class="text-[10px] font-mono text-slate-500 font-bold mt-0.5">${r.code} • ${r.building || 'Gedung RSUD'}</p>
+            </div>
+
+            <div class="w-full bg-slate-900 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg mt-2 tracking-wide uppercase">
+              📲 SCAN DENGAN HP UNTUK LAPOR
+            </div>
+            <div class="text-[9px] font-mono text-slate-400 mt-1 truncate max-w-full">
+              ${r.reportUrl}
+            </div>
+          `;
+          grid.appendChild(card);
+        });
+
+        loading.classList.add('hidden');
+        grid.classList.remove('hidden');
+        lucide.createIcons();
+      } catch (err) {
+        console.error('Failed to load room QR codes:', err);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadQRCodes();
+    });
+  </script>
+</body>
+</html>
+
