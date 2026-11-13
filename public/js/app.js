@@ -168,7 +168,12 @@ function setAuthenticatedUser(user) {
     navRole.textContent = roleLabels[user.role] || user.role.toUpperCase();
   }
   const techDisplay = document.getElementById('techDisplayName');
-  if (techDisplay) techDisplay.textContent = `${user.name} (${user.role.toUpperCase()})`;
+  const techRoleEl = document.getElementById('techRoleBadge');
+  if (techDisplay) techDisplay.textContent = user.name || user.username;
+  if (techRoleEl) {
+    const isCoord = user.role === 'koordinator' || user.role === 'kepala_it' || user.role === 'superadmin';
+    techRoleEl.textContent = isCoord ? 'Koordinator IT' : 'Teknisi IT';
+  }
   loadTechnicianTickets();
 }
 
@@ -1898,9 +1903,13 @@ function loadTechnicianTickets() {
   container.innerHTML = '';
 
   const techNameEl = document.getElementById('techDisplayName');
+  const techRoleEl = document.getElementById('techRoleBadge');
   if (techNameEl) {
-    const roleLabel = activeUser.role === 'kepala_it' ? 'Koordinator SIMRS & IT' : (activeUser.role === 'superadmin' ? 'Super Admin' : 'Teknisi IT');
-    techNameEl.textContent = `${activeUser.name || activeUser.username} (${roleLabel})`;
+    techNameEl.textContent = activeUser.name || activeUser.username;
+  }
+  if (techRoleEl) {
+    const isCoord = activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin';
+    techRoleEl.textContent = isCoord ? 'Koordinator IT' : 'Teknisi IT';
   }
 
   const myTickets = allTickets.filter(t => t.assigned_to === activeUser.id && t.status !== 'closed');
