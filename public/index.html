@@ -488,27 +488,54 @@
           </div>
         </div>
 
-        <!-- Filter Kalender Laporan Harian / Periode -->
-        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2.5">
-            <span class="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
-              <i data-lucide="calendar" class="w-4 h-4 text-sky-600"></i>
-              <span>Filter Periode:</span>
-            </span>
-            <div class="flex items-center space-x-1.5">
-              <label for="reportStartDate" class="text-[11px] font-semibold text-slate-500">Dari:</label>
-              <input type="date" id="reportStartDate" onchange="loadReportsData()" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-sky-500 outline-none">
+        <!-- Filter Kalender Laporan Harian / Periode (Responsif & Rapi) -->
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm shrink-0">
+                📅
+              </span>
+              <div>
+                <h3 class="text-xs sm:text-sm font-bold text-slate-800">Filter Periode Laporan Rekapitulasi</h3>
+                <p class="text-[10px] sm:text-[11px] text-slate-400">Pilih rentang tanggal untuk menyaring grafik dan cetak dokumen</p>
+              </div>
             </div>
-            <div class="flex items-center space-x-1.5">
-              <label for="reportEndDate" class="text-[11px] font-semibold text-slate-500">Sampai:</label>
-              <input type="date" id="reportEndDate" onchange="loadReportsData()" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:ring-2 focus:ring-sky-500 outline-none">
+            <span id="activePeriodLabel" class="inline-block px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-700 font-bold text-[10px] rounded-full whitespace-nowrap">Semua Data</span>
+          </div>
+
+          <!-- Input Tanggal Dari & Sampai dalam Grid Rapi -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <label for="reportStartDate" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Dari Tanggal:
+              </label>
+              <input type="date" id="reportStartDate" onchange="onReportDateChange()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+            </div>
+            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+              <label for="reportEndDate" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                Sampai Tanggal:
+              </label>
+              <input type="date" id="reportEndDate" onchange="onReportDateChange()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
             </div>
           </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <button onclick="setReportPeriod('today')" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-100 hover:bg-sky-50 hover:text-sky-600 text-slate-600 rounded-xl text-xs font-semibold transition text-center">Hari Ini</button>
-            <button onclick="setReportPeriod('7days')" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-100 hover:bg-sky-50 hover:text-sky-600 text-slate-600 rounded-xl text-xs font-semibold transition text-center">7 Hari</button>
-            <button onclick="setReportPeriod('month')" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-100 hover:bg-sky-50 hover:text-sky-600 text-slate-600 rounded-xl text-xs font-semibold transition text-center">Bulan Ini</button>
-            <button onclick="setReportPeriod('all')" class="flex-1 sm:flex-initial px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-semibold transition text-center">Semua Data</button>
+
+          <!-- Tombol Cepat Pilihan Periode -->
+          <div>
+            <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Pilihan Cepat:</span>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button type="button" onclick="setReportPeriod('today')" class="py-2 px-3 bg-slate-100 hover:bg-sky-50 hover:text-sky-700 text-slate-700 font-bold rounded-xl text-xs transition text-center border border-slate-200/80 active:scale-95 shadow-xs">
+                Hari Ini
+              </button>
+              <button type="button" onclick="setReportPeriod('7days')" class="py-2 px-3 bg-slate-100 hover:bg-sky-50 hover:text-sky-700 text-slate-700 font-bold rounded-xl text-xs transition text-center border border-slate-200/80 active:scale-95 shadow-xs">
+                7 Hari Terakhir
+              </button>
+              <button type="button" onclick="setReportPeriod('month')" class="py-2 px-3 bg-slate-100 hover:bg-sky-50 hover:text-sky-700 text-slate-700 font-bold rounded-xl text-xs transition text-center border border-slate-200/80 active:scale-95 shadow-xs">
+                Bulan Ini
+              </button>
+              <button type="button" onclick="setReportPeriod('all')" class="py-2 px-3 bg-slate-100 hover:bg-sky-50 hover:text-sky-700 text-slate-700 font-bold rounded-xl text-xs transition text-center border border-slate-200/80 active:scale-95 shadow-xs">
+                Semua Data
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1121,6 +1148,41 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL PRATINJAU CETAK LAPORAN RESMI (RESPONSIF MOBILE & WEB) -->
+  <div id="reportPrintModal" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-2 sm:p-4 overflow-hidden">
+    <div class="bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-5xl h-[95vh] flex flex-col border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <!-- Modal Header (Tombol Kembali & Cetak Selalu Muncul) -->
+      <div class="p-3 sm:p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
+        <button type="button" onclick="closeReportPrintModal()" class="px-3.5 py-1.5 bg-white/15 hover:bg-white/25 text-white border border-white/25 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 active:scale-95">
+          <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          <span>⬅ Kembali ke Aplikasi</span>
+        </button>
+
+        <div class="hidden sm:block text-center">
+          <h3 class="text-xs font-bold text-slate-100 uppercase tracking-wider">Pratinjau Dokumen Rekapitulasi E-Tiket</h3>
+          <p class="text-[10px] text-slate-400">RSUD Labuha - SIMRS &amp; IT Helpdesk</p>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button type="button" onclick="printReportIframe()" class="px-3.5 sm:px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1.5 active:scale-95">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Cetak / PDF</span>
+          </button>
+          <button type="button" onclick="closeReportPrintModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-base transition">✕</button>
+        </div>
+      </div>
+
+      <!-- Iframe Viewer Container -->
+      <div class="flex-1 w-full bg-slate-100 relative overflow-hidden">
+        <div id="reportPrintLoading" class="absolute inset-0 flex flex-col items-center justify-center bg-white/90 z-10">
+          <div class="w-8 h-8 border-3 border-sky-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+          <span class="text-xs font-bold text-slate-700">Menyiapkan Dokumen Laporan...</span>
+        </div>
+        <iframe id="reportPrintFrame" class="w-full h-full border-0 bg-white" title="Pratinjau Cetak Laporan"></iframe>
+      </div>
     </div>
   </div>
 

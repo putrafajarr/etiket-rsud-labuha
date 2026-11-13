@@ -2012,6 +2012,7 @@ function sendDirectWaFromCard(ticketNo, roomName, reporterName, reporterPhone, t
 function setReportPeriod(period) {
   const startEl = document.getElementById('reportStartDate');
   const endEl = document.getElementById('reportEndDate');
+  const labelEl = document.getElementById('activePeriodLabel');
   if (!startEl || !endEl) return;
 
   const now = new Date();
@@ -2020,6 +2021,13 @@ function setReportPeriod(period) {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const labels = {
+    today: 'Hari Ini',
+    '7days': '7 Hari Terakhir',
+    month: 'Bulan Ini',
+    all: 'Semua Data'
   };
 
   if (period === 'today') {
@@ -2038,6 +2046,14 @@ function setReportPeriod(period) {
     startEl.value = '';
     endEl.value = '';
   }
+
+  if (labelEl) labelEl.textContent = labels[period] || 'Kustom';
+  loadReportsData();
+}
+
+function onReportDateChange() {
+  const labelEl = document.getElementById('activePeriodLabel');
+  if (labelEl) labelEl.textContent = 'Rentang Kustom';
   loadReportsData();
 }
 
@@ -2052,64 +2068,74 @@ async function loadReportsData() {
     if (end) params.push(`endDate=${encodeURIComponent(end)}`);
     if (params.length > 0) url += `?${params.join('&')}`;
 
-    const res = await fetch(url);
+    const res = await smartFetch(url);
+    if (!res || !res.ok) return;
     const stats = await res.json();
+    if (!stats) return;
+
+    if (typeof Chart === 'undefined') return;
 
     // Category Chart
-    const ctxCat = document.getElementById('categoryChart').getContext('2d');
-    if (categoryChartInstance) categoryChartInstance.destroy();
+    const canvasCat = document.getElementById('categoryChart');
+    if (canvasCat) {
+      const ctxCat = canvasCat.getContext('2d');
+      if (categoryChartInstance) categoryChartInstance.destroy();
 
-    const catLabels = stats.categoryStats.map(c => c.category_name);
-    const catCounts = stats.categoryStats.map(c => c.count);
+      const catLabels = (stats.categoryStats || []).map(c => c.category_name);
+      const catCounts = (stats.categoryStats || []).map(c => c.count);
 
-    categoryChartInstance = new Chart(ctxCat, {
-      type: 'doughnut',
-      data: {
-        labels: catLabels,
-        datasets: [{
-          data: catCounts,
-          backgroundColor: ['#0284c7', '#0d9488', '#f59e0b', '#dc2626', '#8b5cf6', '#64748b']
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } }
-      }
-    });
+      categoryChartInstance = new Chart(ctxCat, {
+        type: 'doughnut',
+        data: {
+          labels: catLabels,
+          datasets: [{
+            data: catCounts,
+            backgroundColor: ['#0284c7', '#0d9488', '#f59e0b', '#dc2626', '#8b5cf6', '#64748b']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } }
+        }
+      });
+    }
 
     // Room Chart
-    const ctxRoom = document.getElementById('roomChart').getContext('2d');
-    if (roomChartInstance) roomChartInstance.destroy();
+    const canvasRoom = document.getElementById('roomChart');
+    if (canvasRoom) {
+      const ctxRoom = canvasRoom.getContext('2d');
+      if (roomChartInstance) roomChartInstance.destroy();
 
-    const roomLabels = stats.roomStats.slice(0, 5).map(r => r.room_name.split('(')[0]);
-    const roomCounts = stats.roomStats.slice(0, 5).map(r => r.count);
+      const roomLabels = (stats.roomStats || []).slice(0, 5).map(r => r.room_name.split('(')[0]);
+      const roomCounts = (stats.roomStats || []).slice(0, 5).map(r => r.count);
 
-    roomChartInstance = new Chart(ctxRoom, {
-      type: 'bar',
-      data: {
-        labels: roomLabels,
-        datasets: [{
-          label: 'Jumlah Kendala',
-          data: roomCounts,
-          backgroundColor: '#0284c7',
-          borderRadius: 6
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
-        plugins: { legend: { display: false } }
-      }
-    });
+      roomChartInstance = new Chart(ctxRoom, {
+        type: 'bar',
+        data: {
+          labels: roomLabels,
+          datasets: [{
+            label: 'Jumlah Kendala',
+            data: roomCounts,
+            backgroundColor: '#0284c7',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
 
   } catch (err) {
     console.error('Failed to load reports charts:', err);
   }
 }
 
-// Export Excel with date filter
+// Export Excel with date filter & resolved full URL
 function exportExcel() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
@@ -2118,11 +2144,17 @@ function exportExcel() {
   if (start) params.push(`startDate=${encodeURIComponent(start)}`);
   if (end) params.push(`endDate=${encodeURIComponent(end)}`);
   if (params.length > 0) url += `?${params.join('&')}`;
-  window.location.href = url;
+
+  const customBase = localStorage.getItem('server_api_url');
+  let fullUrl = url;
+  if (customBase && url.startsWith('/api/')) {
+    fullUrl = customBase.replace(/\/+$/, '') + url;
+  }
+  window.location.href = fullUrl;
 }
 
-// Print Official HTML / PDF with date filter
-function printOfficialReport() {
+// Print Official HTML / PDF with date filter (In-App Responsive Modal & Direct fallback)
+async function printOfficialReport() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
   let url = '/api/reports/print-html';
@@ -2130,7 +2162,50 @@ function printOfficialReport() {
   if (start) params.push(`startDate=${encodeURIComponent(start)}`);
   if (end) params.push(`endDate=${encodeURIComponent(end)}`);
   if (params.length > 0) url += `?${params.join('&')}`;
-  window.open(url, '_blank');
+
+  const modal = document.getElementById('reportPrintModal');
+  const frame = document.getElementById('reportPrintFrame');
+  const loading = document.getElementById('reportPrintLoading');
+
+  if (modal && frame) {
+    modal.classList.remove('hidden');
+    if (loading) loading.classList.remove('hidden');
+
+    try {
+      const res = await smartFetch(url);
+      if (!res || !res.ok) throw new Error('Gagal memuat dokumen cetak dari server');
+      const html = await res.text();
+      frame.srcdoc = html;
+      frame.onload = () => {
+        if (loading) loading.classList.add('hidden');
+      };
+    } catch (err) {
+      if (loading) loading.classList.add('hidden');
+      Swal.fire('Gagal Memuat Laporan', err.message, 'error');
+    }
+  } else {
+    const customBase = localStorage.getItem('server_api_url');
+    let fullUrl = url;
+    if (customBase && url.startsWith('/api/')) {
+      fullUrl = customBase.replace(/\/+$/, '') + url;
+    }
+    window.location.href = fullUrl;
+  }
+}
+
+function closeReportPrintModal() {
+  const modal = document.getElementById('reportPrintModal');
+  const frame = document.getElementById('reportPrintFrame');
+  if (modal) modal.classList.add('hidden');
+  if (frame) frame.srcdoc = '';
+}
+
+function printReportIframe() {
+  const frame = document.getElementById('reportPrintFrame');
+  if (frame && frame.contentWindow) {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  }
 }
 
 // Load Gateway & Server Settings
