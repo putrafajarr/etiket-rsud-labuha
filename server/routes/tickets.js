@@ -75,7 +75,7 @@ router.get('/', async (req, res) => {
       params.push(s, s, s, s);
     }
 
-    sql += ' ORDER BY CASE t.priority WHEN "critical" THEN 1 WHEN "high" THEN 2 WHEN "medium" THEN 3 ELSE 4 END, t.created_at DESC';
+    sql += " ORDER BY CASE t.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, t.created_at DESC";
 
     const tickets = await query.all(sql, params);
     res.json(tickets);

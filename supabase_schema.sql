@@ -186,3 +186,4 @@ INSERT INTO users (username, password_hash, name, role, phone, email, room_id, s
 ('yuliana', '$2a$10$a1w8FzK0Z6s7p8q9r0s1tu2v3w4x5y6z7A8B9C0D1E2F3G4H5I6Je', 'Yuliana ode la sida', 'helpdesk', '081234567893', 'yuliana@rsudlabuha.id', 23, 'Helpdesk IT & Dispatcher'),
 ('faisal', '$2a$10$a1w8FzK0Z6s7p8q9r0s1tu2v3w4x5y6z7A8B9C0D1E2F3G4H5I6Je', 'Faisal F Taran', 'teknisi', '081234567894', 'faisal@rsudlabuha.id', 23, 'Teknisi SIMRS & Alat Medis')
 ON CONFLICT (username) DO NOTHING;
+
