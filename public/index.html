@@ -572,16 +572,16 @@
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
+            <table class="w-full text-left text-xs whitespace-nowrap">
               <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
-                <tr>
-                  <th class="p-3.5">Nama Lengkap</th>
-                  <th class="p-3.5">Username</th>
-                  <th class="p-3.5">Peran / Role</th>
-                  <th class="p-3.5">Kontak WhatsApp</th>
-                  <th class="p-3.5">Spesialisasi / Keahlian</th>
-                  <th class="p-3.5">Status</th>
-                  <th class="p-3.5 text-center">Aksi</th>
+                <tr class="whitespace-nowrap">
+                  <th class="p-3.5 whitespace-nowrap">Nama Lengkap</th>
+                  <th class="p-3.5 whitespace-nowrap">Username</th>
+                  <th class="p-3.5 whitespace-nowrap">Peran / Role</th>
+                  <th class="p-3.5 whitespace-nowrap">Kontak WhatsApp</th>
+                  <th class="p-3.5 whitespace-nowrap">Spesialisasi / Keahlian</th>
+                  <th class="p-3.5 whitespace-nowrap">Status</th>
+                  <th class="p-3.5 text-center whitespace-nowrap">Aksi</th>
                 </tr>
               </thead>
               <tbody id="usersTableBody" class="divide-y divide-slate-100"></tbody>
@@ -689,10 +689,10 @@
               </div>
             </div>
 
-            <div class="pt-2 flex items-center space-x-2">
-              <input type="tel" id="testWaPhone" placeholder="Nomor WA Uji Coba (08xxxx)" class="text-xs p-2 border rounded-xl flex-1 max-w-xs">
-              <button onclick="testWhatsApp()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition">
-                Kirim Tes WhatsApp
+            <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input type="tel" id="testWaPhone" placeholder="Nomor WA Uji Coba (08xxxx)" class="text-xs p-2.5 border rounded-xl flex-1">
+              <button type="button" onclick="testWhatsApp()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
+                <span>Kirim Tes WhatsApp</span>
               </button>
             </div>
           </div>
@@ -721,9 +721,9 @@
               </div>
             </div>
 
-            <div class="pt-2">
-              <button onclick="testTelegram()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition">
-                Kirim Tes Notifikasi Telegram
+            <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <button type="button" onclick="testTelegram()" class="w-full sm:w-auto px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
+                <span>Kirim Tes Notifikasi Telegram</span>
               </button>
             </div>
           </div>
@@ -764,10 +764,10 @@
               </div>
             </div>
 
-            <div class="pt-2 flex items-center space-x-2">
-              <input type="email" id="testEmailTarget" placeholder="Email tujuan pengujian..." class="text-xs p-2 border rounded-xl flex-1 max-w-xs">
-              <button onclick="testEmail()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition">
-                Kirim Tes Email
+            <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input type="email" id="testEmailTarget" placeholder="Email tujuan pengujian..." class="text-xs p-2.5 border rounded-xl flex-1">
+              <button type="button" onclick="testEmail()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
+                <span>Kirim Tes Email</span>
               </button>
             </div>
           </div>
@@ -852,22 +852,14 @@
           <p id="modalDesc" class="text-xs text-slate-600 mt-1 leading-relaxed bg-sky-50/50 p-3 rounded-xl border border-sky-100"></p>
         </div>
 
-        <!-- Quick WhatsApp Button to Reporter (100% Free via WhatsApp Web/App) -->
-        <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
-          <div class="flex items-center space-x-2.5">
-            <span class="text-2xl">💬</span>
-            <div>
-              <p class="text-xs font-bold text-emerald-900">Kirim WhatsApp ke Pelapor (1-Klik)</p>
-              <p class="text-[10px] text-emerald-700">Kirim pesan langsung dari nomor WhatsApp HP Anda tanpa bot</p>
-            </div>
+        <!-- Permanently Locked Banner for Resolved / Closed Tickets -->
+        <div id="modalResolvedBanner" class="hidden p-4 bg-emerald-50/90 border-2 border-emerald-400 rounded-2xl text-center space-y-2 shadow-sm">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md">
+            ✅
           </div>
-          <div class="flex items-center space-x-2 w-full sm:w-auto">
-            <button type="button" onclick="sendWhatsAppDirect('otw')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
-              <span>🚀 OTW Lokasi</span>
-            </button>
-            <button type="button" onclick="sendWhatsAppDirect('done')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
-              <span>✅ Kabari Selesai</span>
-            </button>
+          <div>
+            <p class="font-bold text-sm text-emerald-950">Tiket Telah Selesai &amp; Dikunci Permanen</p>
+            <p class="text-[11px] text-emerald-800 mt-1">Status tiket ini telah selesai dikerjakan (Resolved / Closed). Seluruh aksi perbaikan, disposisi, dan tombol WhatsApp telah dikunci permanen agar data riwayat tidak dapat diotak-atik lagi.</p>
           </div>
         </div>
 
@@ -878,7 +870,7 @@
           </div>
           <div>
             <p class="font-bold text-xs text-amber-950">Tiket Terkunci (Mode Hanya Lihat)</p>
-            <p class="text-[11px] text-amber-800 mt-1">Tiket ini sedang ditangani oleh <b id="modalReadOnlyTechName" class="text-amber-950"></b>.<br>Anda hanya bisa melihat detail laporan. Hanya teknisi tersebut atau <b>Koordinator IT</b> yang dapat mengubah status atau mendisposisikan tiket ini.</p>
+            <p class="text-[11px] text-amber-800 mt-1">Tiket ini sedang ditangani oleh <b id="modalReadOnlyTechName" class="text-amber-950"></b>.<br>Anda hanya dapat melihat rincian laporan. Tindakan teknisi, perubahan status, dan tombol WhatsApp dikunci untuk Anda (hanya teknisi yang bertugas atau <b>Koordinator IT</b> yang dapat mengelolanya).</p>
           </div>
         </div>
 
@@ -887,7 +879,7 @@
           <!-- Disposisi / Assign Section -->
           <div class="border-t pt-4 space-y-3">
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              1. Penanganan & Disposisi Teknisi
+              1. Penanganan &amp; Disposisi Teknisi
             </label>
             
             <!-- Tombol Cepat: Ambil Tiket Ini (1 Klik Otomatis Sesuai Akun Login) -->
@@ -916,10 +908,34 @@
             </div>
           </div>
 
+          <!-- Quick WhatsApp Button to Reporter (Locked inside Action Container) -->
+          <div id="modalWaBox" class="border-t pt-4 space-y-2">
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+              2. Komunikasi WhatsApp ke Pelapor
+            </label>
+            <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+              <div class="flex items-center space-x-2.5">
+                <span class="text-2xl shrink-0">💬</span>
+                <div>
+                  <p class="text-xs font-bold text-emerald-900">Kirim WhatsApp ke Pelapor (1-Klik)</p>
+                  <p class="text-[10px] text-emerald-700">Kirim pesan langsung dari nomor WhatsApp HP Anda tanpa bot</p>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2 w-full sm:w-auto">
+                <button type="button" onclick="sendWhatsAppDirect('otw')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
+                  <span>🚀 OTW Lokasi</span>
+                </button>
+                <button type="button" onclick="sendWhatsAppDirect('done')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
+                  <span>✅ Kabari Selesai</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Status Change Section -->
           <div class="border-t pt-4 space-y-3">
             <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              2. Perbarui Status & Hasil Pengerjaan
+              3. Perbarui Status &amp; Hasil Pengerjaan
             </label>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>

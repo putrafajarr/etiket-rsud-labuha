@@ -240,6 +240,10 @@ router.patch('/:id/assign', async (req, res) => {
       return res.status(404).json({ error: 'Tiket tidak ditemukan' });
     }
 
+    if (currentTicket.status === 'resolved' || currentTicket.status === 'closed') {
+      return res.status(400).json({ error: 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen. Tidak dapat diubah atau diotak-atik lagi.' });
+    }
+
     const tech = await query.get('SELECT id, name, phone, email FROM users WHERE id = ?', [technician_id]);
     if (!tech) {
       return res.status(404).json({ error: 'Teknisi tidak ditemukan' });
@@ -289,6 +293,10 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
     const currentTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
     if (!currentTicket) {
       return res.status(404).json({ error: 'Tiket tidak ditemukan' });
+    }
+
+    if (currentTicket.status === 'resolved' || currentTicket.status === 'closed') {
+      return res.status(400).json({ error: 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen. Tidak dapat diubah atau diotak-atik lagi.' });
     }
 
     let sql = 'UPDATE tickets SET status = ?, updated_at = ?';
