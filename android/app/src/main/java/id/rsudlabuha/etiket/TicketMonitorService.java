@@ -148,7 +148,10 @@ public class TicketMonitorService extends Service {
         }
 
         String serverUrl = prefs.getString(KEY_SERVER_URL, "");
+        int lastSeenId = prefs.getInt(KEY_LAST_SEEN_ID, -1);
+
         if (serverUrl == null || serverUrl.trim().isEmpty()) {
+            pollSupabaseDirectFallback(lastSeenId);
             return;
         }
         serverUrl = serverUrl.trim();
@@ -156,7 +159,6 @@ public class TicketMonitorService extends Service {
             serverUrl = serverUrl.substring(0, serverUrl.length() - 1);
         }
 
-        int lastSeenId = prefs.getInt(KEY_LAST_SEEN_ID, -1);
         String endpoint = lastSeenId >= 0
             ? serverUrl + "/api/tickets/latest-alert?sinceId=" + lastSeenId
             : serverUrl + "/api/tickets/latest-alert";
@@ -172,6 +174,7 @@ public class TicketMonitorService extends Service {
 
             int code = conn.getResponseCode();
             if (code != 200) {
+                pollSupabaseDirectFallback(lastSeenId);
                 return;
             }
 
@@ -215,7 +218,77 @@ public class TicketMonitorService extends Service {
                 prefs.edit().putInt(KEY_LAST_SEEN_ID, latestId).apply();
             }
         } catch (Exception e) {
-            Log.d(TAG, "Fetch failed (" + endpoint + "): " + e.getMessage());
+            Log.d(TAG, "Fetch failed (" + endpoint + "): " + e.getMessage() + ", trying Supabase direct...");
+            pollSupabaseDirectFallback(lastSeenId);
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+    private void pollSupabaseDirectFallback(int lastSeenId) {
+        String supaUrl = "https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets?select=id,ticket_no,room_name,title,reporter_name,priority&order=id.desc&limit=10";
+        String anonKey = "sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6";
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(supaUrl);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("apikey", anonKey);
+            conn.setRequestProperty("Authorization", "Bearer " + anonKey);
+            conn.setConnectTimeout(3500);
+            conn.setReadTimeout(3500);
+            conn.setUseCaches(false);
+
+            if (conn.getResponseCode() != 200) {
+                return;
+            }
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+
+            JSONArray tickets = new JSONArray(sb.toString());
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            if (lastSeenId < 0) {
+                int highest = 0;
+                for (int i = 0; i < tickets.length(); i++) {
+                    JSONObject t = tickets.optJSONObject(i);
+                    if (t != null && t.optInt("id", 0) > highest) {
+                        highest = t.optInt("id", 0);
+                    }
+                }
+                prefs.edit().putInt(KEY_LAST_SEEN_ID, highest).apply();
+                return;
+            }
+
+            int maxSeen = lastSeenId;
+            for (int i = 0; i < tickets.length(); i++) {
+                JSONObject t = tickets.optJSONObject(i);
+                if (t == null) continue;
+                int id = t.optInt("id", 0);
+                if (id > lastSeenId) {
+                    if (id > maxSeen) {
+                        maxSeen = id;
+                    }
+                    String ticketNo = t.optString("ticket_no", "");
+                    String roomName = t.optString("room_name", "Ruangan RSUD");
+                    String title = t.optString("title", "Laporan Kendala IT Baru");
+                    String reporter = t.optString("reporter_name", "Staf RSUD");
+                    String priority = t.optString("priority", "medium");
+
+                    showTicketNotification(this, id, ticketNo, roomName, title, reporter, priority);
+                }
+            }
+            if (maxSeen > lastSeenId) {
+                prefs.edit().putInt(KEY_LAST_SEEN_ID, maxSeen).apply();
+            }
+        } catch (Exception ignored) {
         } finally {
             if (conn != null) {
                 conn.disconnect();

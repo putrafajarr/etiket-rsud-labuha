@@ -65,9 +65,19 @@ public class MainActivity extends BridgeActivity {
 
         bridgeBuilder.addWebViewListener(new WebViewListener() {
             @Override
+            public void onPageStarted(WebView webView) {
+                if (webView != null && webView.getSettings() != null) {
+                    webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
+                    webView.getSettings().setDomStorageEnabled(true);
+                }
+            }
+
+            @Override
             public void onPageLoaded(WebView webView) {
                 // Clear cache so APK always uses newest HTML/JS without stale cache
-                webView.clearCache(true);
+                if (webView != null) {
+                    webView.clearCache(true);
+                }
             }
 
             @Override

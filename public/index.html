@@ -53,6 +53,13 @@
 
       <!-- Action buttons & Controls -->
       <div class="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
+        <!-- Live Supabase Status & Instant Sync -->
+        <button id="btnSupabaseLiveSync" onclick="triggerManualSync()" title="Status Sinkronisasi Supabase Real-Time (Klik untuk sinkron instan)" class="p-2 sm:px-2.5 sm:py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition flex items-center space-x-1.5 text-xs font-bold active:scale-95 shrink-0">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+          <span class="hidden xl:inline text-[11px]">Supabase Live (2s)</span>
+          <i data-lucide="refresh-cw" id="iconManualSync" class="w-3.5 h-3.5 text-emerald-600"></i>
+        </button>
+
         <!-- Audio Alarm Toggle -->
         <button id="btnSoundToggle" onclick="toggleSound()" title="Aktifkan/Matikan Suara Alarm" class="p-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition flex items-center space-x-1.5 text-xs font-semibold">
           <i data-lucide="volume-2" id="soundIcon" class="w-4 h-4 text-emerald-600"></i>
@@ -118,6 +125,20 @@
 
     <!-- Navigation Menu Items in Drawer -->
     <div class="p-3 space-y-1 overflow-y-auto flex-1 text-xs">
+      <!-- Supabase Live Sync Status in Mobile Drawer -->
+      <div class="px-3 py-2 mb-2 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <div>
+            <span class="block text-[11px] font-bold text-emerald-900 leading-tight">Supabase Real-Time</span>
+            <span class="block text-[9px] text-emerald-600 font-medium">Sinkron otomatis tiap 2 detik</span>
+          </div>
+        </div>
+        <button onclick="triggerManualSync()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs active:scale-95 transition">
+          Sinkron
+        </button>
+      </div>
+
       <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 mb-1.5">Menu Utama</p>
       
       <button onclick="switchTab('tickets'); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl font-bold text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition text-left">

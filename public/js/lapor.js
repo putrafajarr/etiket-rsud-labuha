@@ -44,10 +44,31 @@ function loadSavedIdentity() {
   if (savedEmail) document.getElementById('reporter_email').value = savedEmail;
 }
 
-// Load rooms from backend
+// Load rooms from backend with resilient Supabase Cloud fallback
 async function loadRooms() {
   try {
-    const res = await fetch('/api/rooms');
+    let res;
+    try {
+      res = await fetch('/api/rooms');
+    } catch (netErr) {
+      // Backend offline, fallback to direct Supabase REST
+      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/rooms?select=*&is_active=neq.0&order=name.asc', {
+        headers: {
+          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
+        }
+      });
+    }
+
+    if (!res || !res.ok) {
+      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/rooms?select=*&is_active=neq.0&order=name.asc', {
+        headers: {
+          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
+        }
+      });
+    }
+
     roomsData = await res.json();
     const select = document.getElementById('room_id');
     
