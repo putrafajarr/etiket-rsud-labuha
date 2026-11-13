@@ -1,4 +1,5 @@
 let roomsData = [];
+let categoriesData = [];
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -28,10 +29,11 @@ function installApp() {
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', async () => {
-  await loadRooms();
+  await Promise.all([loadRooms(), loadCategories()]);
   checkUrlParams();
   loadSavedIdentity();
   setupForm();
+  if (window.lucide) window.lucide.createIcons();
 });
 
 // Load remembered reporter identity from localStorage
@@ -42,6 +44,47 @@ function loadSavedIdentity() {
   if (savedName) document.getElementById('reporter_name').value = savedName;
   if (savedPhone) document.getElementById('reporter_phone').value = savedPhone;
   if (savedEmail) document.getElementById('reporter_email').value = savedEmail;
+}
+
+// Load categories dynamically from backend / Supabase
+async function loadCategories() {
+  try {
+    let res;
+    try {
+      res = await fetch('/api/categories');
+    } catch (netErr) {
+      // Backend offline, direct Supabase REST
+      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/categories?select=*&is_active=neq.0&order=id.asc', {
+        headers: {
+          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
+        }
+      });
+    }
+
+    if (!res || !res.ok) {
+      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/categories?select=*&is_active=neq.0&order=id.asc', {
+        headers: {
+          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
+        }
+      });
+    }
+
+    categoriesData = await res.json();
+    const select = document.getElementById('category_id');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">-- Pilih Jenis Masalah / Kategori --</option>';
+    categoriesData.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('Failed to load categories:', err);
+  }
 }
 
 // Load rooms from backend with resilient Supabase Cloud fallback
@@ -71,6 +114,7 @@ async function loadRooms() {
 
     roomsData = await res.json();
     const select = document.getElementById('room_id');
+    if (!select) return;
     
     // Group rooms by building
     const grouped = {};
@@ -83,7 +127,7 @@ async function loadRooms() {
     select.innerHTML = '<option value="">-- Pilih Ruangan Anda --</option>';
     for (const [building, rooms] of Object.entries(grouped)) {
       const optgroup = document.createElement('optgroup');
-      optgroup.label = building;
+      optgroup.label = `📍 ${building}`;
       rooms.forEach(r => {
         const opt = document.createElement('option');
         opt.value = r.id;

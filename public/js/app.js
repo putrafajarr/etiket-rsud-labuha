@@ -344,6 +344,11 @@ async function smartFetch(url, options = {}) {
           headers: supaHeaders
         });
         if (supaRes.ok) return supaRes;
+      } else if (url.startsWith('/api/categories')) {
+        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/categories?select=*&is_active=neq.0&order=id.asc`, {
+          headers: supaHeaders
+        });
+        if (supaRes.ok) return supaRes;
       } else if (url.startsWith('/api/users/technicians') || url.startsWith('/api/users')) {
         const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/users?select=id,username,name,role,phone,email&is_active=neq.0`, {
           headers: supaHeaders

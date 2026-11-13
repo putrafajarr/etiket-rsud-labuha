@@ -123,7 +123,7 @@ router.post('/telegram', async (req, res) => {
         `• <code>/lapor [Ruangan] [Rincian Kendala]</code> - Buat tiket baru instan\n` +
         `• <code>/status [No Tiket]</code> - Cek status pengerjaan tiket\n` +
         `• <code>/info</code> - Kontak Helpdesk IT RSUD Labuha\n\n` +
-        `<i>Contoh:</i> <code>/lapor IGD Komputer EKG mati tiba-tiba</code>`;
+        `<i>Contoh:</i> <code>/lapor IGD Komputer SIMRS mati tiba-tiba</code>`;
       await TelegramService.send(helpMsg, chatId);
       return res.status(200).send('OK');
     }

@@ -73,35 +73,50 @@
         
         <!-- Pilihan Ruangan -->
         <div id="roomSelectContainer">
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            1. Ruangan / Poli / Unit Kerja <span class="text-rose-500">*</span>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">1</span>
+            <span>Ruangan / Poli / Unit Kerja</span>
+            <span class="text-rose-500">*</span>
           </label>
-          <select id="room_id" name="room_id" required class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-base sm:text-sm bg-white shadow-sm outline-none">
-            <option value="">-- Pilih Ruangan Anda --</option>
-          </select>
+          <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-sky-600">
+              <i data-lucide="door-open" class="w-4 h-4"></i>
+            </div>
+            <select id="room_id" name="room_id" required class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
+              <option value="">-- Memuat Daftar Ruangan... --</option>
+            </select>
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
         </div>
 
-        <!-- Kategori Kendala -->
+        <!-- Kategori Kendala (Dimuat Otomatis dari Supabase) -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            2. Kategori Kendala <span class="text-rose-500">*</span>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">2</span>
+            <span>Kategori Kendala IT</span>
+            <span class="text-rose-500">*</span>
           </label>
-          <select id="category_id" name="category_id" required class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-base sm:text-sm bg-white shadow-sm outline-none">
-            <option value="">-- Pilih Jenis Masalah --</option>
-            <option value="1">SIMRS & Aplikasi Khanza / HIS</option>
-            <option value="2">Jaringan, LAN & WiFi</option>
-            <option value="3">Komputer, PC & Laptop</option>
-            <option value="4">Printer, Scanner & Cetak SEP</option>
-            <option value="5">Alat Medis Terhubung PC (Lab/Radiologi/EKG)</option>
-            <option value="6">CCTV & Telepon PABX / Intercom</option>
-            <option value="7">Email & Akun Pegawai</option>
-          </select>
+          <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+            <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-sky-600">
+              <i data-lucide="tag" class="w-4 h-4"></i>
+            </div>
+            <select id="category_id" name="category_id" required class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
+              <option value="">-- Memuat Kategori Kendala... --</option>
+            </select>
+            <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
         </div>
 
         <!-- Tingkat Urgensi / Prioritas -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            3. Tingkat Urgensi Masalah <span class="text-rose-500">*</span>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">3</span>
+            <span>Tingkat Urgensi Masalah</span>
+            <span class="text-rose-500">*</span>
           </label>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <label class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-sky-400 has-[:checked]:border-sky-600 has-[:checked]:bg-sky-50/70 has-[:checked]:ring-2 has-[:checked]:ring-sky-500 select-none">
@@ -131,10 +146,12 @@
 
         <!-- Uraian Keluhan -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-            4. Rincian / Kronologi Kendala <span class="text-rose-500">*</span>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">4</span>
+            <span>Rincian / Kronologi Kendala</span>
+            <span class="text-rose-500">*</span>
           </label>
-          <textarea id="description" name="description" rows="3" required placeholder="Jelaskan kendala apa yang terjadi (contoh: Printer cetak SEP macet / Komputer billing kasir mati / Layar monitor EKG blank)..." class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 text-base sm:text-sm shadow-sm outline-none"></textarea>
+          <textarea id="description" name="description" rows="3" required placeholder="Jelaskan kendala apa yang terjadi secara rinci (contoh: Printer cetak SEP macet / Komputer billing kasir mati / Aplikasi SIMRS error / Jaringan internet putus)..." class="w-full px-3.5 py-3 rounded-xl border border-slate-300 hover:border-sky-400 focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20 text-sm text-slate-800 shadow-sm outline-none transition"></textarea>
         </div>
 
         <!-- Upload Foto dari Kamera HP / Galeri -->
@@ -172,15 +189,25 @@
               <label class="block text-xs font-bold text-slate-700 mb-1">
                 Nama Pelapor <span class="text-rose-500">*</span>
               </label>
-              <input type="text" id="reporter_name" name="reporter_name" required placeholder="Nama Anda (Perawat/Dokter/Staf)" class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-base sm:text-sm shadow-sm outline-none">
+              <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <i data-lucide="user" class="w-4 h-4 text-sky-600"></i>
+                </div>
+                <input type="text" id="reporter_name" name="reporter_name" required placeholder="Nama Anda (Perawat/Dokter/Staf)" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-semibold text-slate-800 outline-none">
+              </div>
             </div>
 
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">
                 Nomor WhatsApp <span class="text-rose-500">*</span>
               </label>
-              <input type="tel" id="reporter_phone" name="reporter_phone" required placeholder="08xxxxxxxxxx" class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-base sm:text-sm shadow-sm outline-none font-mono">
-              <span class="text-[10px] text-slate-400 mt-0.5 block">Untuk menerima notifikasi status pengerjaan</span>
+              <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <i data-lucide="phone" class="w-4 h-4 text-emerald-600"></i>
+                </div>
+                <input type="tel" id="reporter_phone" name="reporter_phone" required placeholder="08xxxxxxxxxx" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-bold text-slate-800 outline-none font-mono">
+              </div>
+              <span class="text-[10px] text-slate-400 mt-1 block">Untuk menerima update status &amp; notifikasi WhatsApp</span>
             </div>
           </div>
 
@@ -188,7 +215,12 @@
             <label class="block text-xs font-bold text-slate-700 mb-1">
               Alamat Email (Opsional)
             </label>
-            <input type="email" id="reporter_email" name="reporter_email" placeholder="nama@rsudlabuha.id" class="w-full px-3.5 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-base sm:text-sm shadow-sm outline-none font-mono">
+            <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <i data-lucide="mail" class="w-4 h-4 text-sky-600"></i>
+              </div>
+              <input type="email" id="reporter_email" name="reporter_email" placeholder="nama@rsudlabuha.id" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm text-slate-800 outline-none font-mono">
+            </div>
           </div>
         </div>
 
