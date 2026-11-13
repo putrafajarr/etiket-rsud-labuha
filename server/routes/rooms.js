@@ -134,15 +134,20 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE (Soft delete) room to protect historical tickets and reports
+// DELETE (Hard delete if no tickets, otherwise soft delete to protect historical reports)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    // Soft delete: past tickets, reports, and logs remain 100% intact
-    await query.run('UPDATE rooms SET is_active = 0 WHERE id = ?', [id]);
-    res.json({ message: 'Ruangan berhasil dinonaktifkan (arsip riwayat aman)' });
+    const ticketCount = await query.get('SELECT COUNT(*) as cnt FROM tickets WHERE room_id = ?', [id]);
+    if (ticketCount && parseInt(ticketCount.cnt, 10) > 0) {
+      await query.run('UPDATE rooms SET is_active = 0 WHERE id = ?', [id]);
+      res.json({ message: 'Ruangan memiliki riwayat tiket, dinonaktifkan dengan aman' });
+    } else {
+      await query.run('DELETE FROM rooms WHERE id = ?', [id]);
+      res.json({ message: 'Ruangan berhasil dihapus secara permanen dari Supabase' });
+    }
   } catch (err) {
-    res.status(500).json({ error: 'Gagal menonaktifkan ruangan: ' + err.message });
+    res.status(500).json({ error: 'Gagal menghapus ruangan: ' + err.message });
   }
 });
 

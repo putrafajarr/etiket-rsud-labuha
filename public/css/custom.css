@@ -112,6 +112,15 @@ body {
   .overflow-x-auto {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Safe area padding for mobile bottom nav (iPhone home bar) */
+  .safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+#mobileDrawer {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Tap highlight removal for native feel */

@@ -307,9 +307,38 @@ function toggleSound() {
   lucide.createIcons();
 }
 
+// Mobile Navigation Drawer Toggle
+function toggleMobileMenu() {
+  const drawer = document.getElementById('mobileDrawer');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (!drawer || !backdrop) return;
+
+  const isOpen = !drawer.classList.contains('translate-x-full');
+  if (isOpen) {
+    closeMobileMenu();
+  } else {
+    const userNameEl = document.getElementById('drawerUserName');
+    const userRoleEl = document.getElementById('drawerUserRole');
+    if (userNameEl && currentUser) userNameEl.textContent = currentUser.name || currentUser.username;
+    if (userRoleEl && currentUser) userRoleEl.textContent = (currentUser.role || 'PETUGAS IT').toUpperCase();
+
+    backdrop.classList.remove('hidden');
+    drawer.classList.remove('translate-x-full');
+    lucide.createIcons();
+  }
+}
+
+function closeMobileMenu() {
+  const drawer = document.getElementById('mobileDrawer');
+  const backdrop = document.getElementById('mobileDrawerBackdrop');
+  if (drawer) drawer.classList.add('translate-x-full');
+  if (backdrop) backdrop.classList.add('hidden');
+}
+
 // Switch view tabs
 function switchTab(tab) {
   currentTab = tab;
+  closeMobileMenu();
   const tabs = ['tickets', 'technician', 'reports', 'rooms', 'users', 'gateway', 'logs'];
   tabs.forEach(t => {
     const el = document.getElementById(`view-${t}`);
@@ -512,6 +541,25 @@ async function loadRoomsMaster() {
     // Rooms Grid Tab
     const roomsGrid = document.getElementById('roomsGrid');
     roomsGrid.innerHTML = '';
+
+    if (!allRooms || allRooms.length === 0) {
+      roomsGrid.innerHTML = `
+        <div class="col-span-full py-12 px-4 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200">
+          <div class="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl font-bold shadow-sm">
+            🏢
+          </div>
+          <h3 class="font-bold text-slate-800 text-sm">Belum Ada Data Ruangan / Unit</h3>
+          <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Semua data unit lama telah dibersihkan. Anda sekarang dapat menambahkan unit/ruangan RSUD Labuha baru dari nol.</p>
+          <button onclick="openAddRoomModal()" class="mt-4 px-4 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white font-bold rounded-xl text-xs transition inline-flex items-center space-x-1.5 shadow-md shadow-sky-600/20 active:scale-95">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Tambah Unit Pertama</span>
+          </button>
+        </div>
+      `;
+      lucide.createIcons();
+      return;
+    }
+
     allRooms.forEach(r => {
       const card = document.createElement('div');
       card.className = 'bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3';
