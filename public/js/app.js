@@ -351,7 +351,7 @@ function switchTab(tab) {
         navDesktop.className = 'w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl font-bold text-xs text-sky-700 bg-sky-50 transition text-left';
       }
       if (navMob) {
-        navMob.className = 'flex flex-col items-center text-sky-600 font-bold text-[10px] space-y-1';
+        navMob.classList.add('active');
       }
     } else {
       if (el) el.classList.add('hidden');
@@ -359,10 +359,13 @@ function switchTab(tab) {
         navDesktop.className = 'w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl font-semibold text-xs text-slate-600 hover:bg-slate-100 transition text-left';
       }
       if (navMob) {
-        navMob.className = 'flex flex-col items-center text-slate-500 text-[10px] space-y-1';
+        navMob.classList.remove('active');
       }
     }
   });
+
+  const mobMenu = document.getElementById('mob-menu');
+  if (mobMenu) mobMenu.classList.remove('active');
 
   if (tab === 'reports') {
     loadReportsData();

@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>SIM-ETIKET IT RSUD LABUHA</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0284c7">
@@ -775,25 +775,25 @@
   </div>
 
   <!-- Mobile Bottom Navigation (for Smartphone View) -->
-  <nav class="lg:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200 py-1.5 px-1 flex justify-around items-center z-40 shadow-lg safe-bottom">
-    <button onclick="switchTab('tickets')" id="mob-tickets" class="flex flex-col items-center text-sky-600 font-bold text-[10px] space-y-0.5 flex-1 py-1 transition active:scale-95">
-      <i data-lucide="layout-grid" class="w-4 h-4"></i>
+  <nav id="mobileBottomNav" class="lg:hidden safe-bottom">
+    <button type="button" onclick="switchTab('tickets')" id="mob-tickets" class="mob-nav-btn active">
+      <i data-lucide="layout-grid"></i>
       <span>Tiket</span>
     </button>
-    <button onclick="switchTab('rooms')" id="mob-rooms" class="flex flex-col items-center text-slate-500 text-[10px] space-y-0.5 flex-1 py-1 transition active:scale-95">
-      <i data-lucide="door-open" class="w-4 h-4"></i>
+    <button type="button" onclick="switchTab('rooms')" id="mob-rooms" class="mob-nav-btn">
+      <i data-lucide="door-open"></i>
       <span>Ruangan</span>
     </button>
-    <button onclick="switchTab('users')" id="mob-users" class="flex flex-col items-center text-slate-500 text-[10px] space-y-0.5 flex-1 py-1 transition active:scale-95">
-      <i data-lucide="users" class="w-4 h-4"></i>
+    <button type="button" onclick="switchTab('users')" id="mob-users" class="mob-nav-btn">
+      <i data-lucide="users"></i>
       <span>Akun IT</span>
     </button>
-    <button onclick="switchTab('technician')" id="mob-technician" class="flex flex-col items-center text-slate-500 text-[10px] space-y-0.5 flex-1 py-1 transition active:scale-95">
-      <i data-lucide="smartphone" class="w-4 h-4"></i>
+    <button type="button" onclick="switchTab('technician')" id="mob-technician" class="mob-nav-btn">
+      <i data-lucide="smartphone"></i>
       <span>Teknisi</span>
     </button>
-    <button onclick="toggleMobileMenu()" id="mob-menu" class="flex flex-col items-center text-slate-500 text-[10px] space-y-0.5 flex-1 py-1 transition active:scale-95">
-      <i data-lucide="menu" class="w-4 h-4"></i>
+    <button type="button" onclick="toggleMobileMenu()" id="mob-menu" class="mob-nav-btn">
+      <i data-lucide="menu"></i>
       <span>Menu</span>
     </button>
   </nav>
