@@ -9,7 +9,7 @@ let activeUser = {
   id: 1,
   username: 'superadmin',
   name: 'Super Administrator IT',
-  role: 'superadmin'
+  role: 'koordinator'
 };
 let selectedTicketForModal = null;
 let categoryChartInstance = null;
@@ -426,7 +426,7 @@ function startAutoSync() {
     } catch (e) {
       // Background silent retry
     }
-  }, 3000);
+  }, 2000);
 }
 
 // Toggle audio alert sound
@@ -1292,32 +1292,66 @@ async function openTicketModal(ticketId) {
     const data = await res.json();
     selectedTicketForModal = data.ticket;
 
-    // Anti-overlap banner inside modal
+    // Strict Lock Permission Checks
+    const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
+    const isAssignedToMe = activeUser && selectedTicketForModal.assigned_to && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name);
+    const isUnassigned = !selectedTicketForModal.assigned_to;
+
+    const actionContainer = document.getElementById('modalActionContainer');
+    const readOnlyBanner = document.getElementById('modalReadOnlyBanner');
+    const claimBox = document.getElementById('modalClaimBox');
+    const delegateLabel = document.getElementById('modalDelegateLabel');
     const lockBanner = document.getElementById('modalLockBanner');
     const lockText = document.getElementById('modalLockText');
-    if (lockBanner && lockText) {
-      if (selectedTicketForModal.assigned_to) {
+
+    if (isUnassigned) {
+      // Tiket belum diambil siapapun
+      if (lockBanner) lockBanner.classList.add('hidden');
+      if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
+      if (actionContainer) actionContainer.classList.remove('hidden');
+      if (claimBox) claimBox.classList.remove('hidden');
+      if (delegateLabel) delegateLabel.textContent = 'Atau Disposisikan ke Petugas Lain:';
+    } else if (isAssignedToMe) {
+      // Tiket sedang ditangani oleh user yang sedang login
+      if (lockBanner) {
         lockBanner.classList.remove('hidden');
-        if (activeUser && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name)) {
-          lockBanner.className = 'p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl flex items-center space-x-3 text-emerald-950 shadow-sm';
-          const iconBox = lockBanner.querySelector('div');
-          if (iconBox) {
-            iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
-            iconBox.textContent = '👤';
-          }
-          lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani.`;
-        } else {
-          lockBanner.className = 'p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center space-x-3 text-amber-950 shadow-sm';
-          const iconBox = lockBanner.querySelector('div');
-          if (iconBox) {
-            iconBox.className = 'w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
-            iconBox.textContent = '🔒';
-          }
-          lockText.innerHTML = `Tiket ini sedang dikerjakan oleh <b>${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}</b>.`;
+        lockBanner.className = 'p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl flex items-center space-x-3 text-emerald-950 shadow-sm';
+        const iconBox = lockBanner.querySelector('div');
+        if (iconBox) {
+          iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
+          iconBox.textContent = '👤';
         }
-      } else {
-        lockBanner.classList.add('hidden');
+        lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani. Silakan perbarui status atau disposisikan jika perlu bantuan.`;
       }
+      if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
+      if (actionContainer) actionContainer.classList.remove('hidden');
+      if (claimBox) claimBox.classList.add('hidden');
+      if (delegateLabel) delegateLabel.textContent = 'Oper / Disposisikan Tiket Ini ke Rekan IT Lain:';
+    } else if (isCoordinator) {
+      // Tiket sedang ditangani orang lain, tapi yang buka adalah KOORDINATOR IT
+      if (lockBanner) {
+        lockBanner.classList.remove('hidden');
+        lockBanner.className = 'p-3.5 bg-sky-50 border-2 border-sky-300 rounded-2xl flex items-center space-x-3 text-sky-950 shadow-sm';
+        const iconBox = lockBanner.querySelector('div');
+        if (iconBox) {
+          iconBox.className = 'w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
+          iconBox.textContent = '👔';
+        }
+        lockText.innerHTML = `Tiket sedang dikerjakan oleh <b>${selectedTicketForModal.assigned_to_name}</b>. Sebagai Koordinator IT, Anda memiliki wewenang disposisi / alih tugas.`;
+      }
+      if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
+      if (actionContainer) actionContainer.classList.remove('hidden');
+      if (claimBox) claimBox.classList.add('hidden');
+      if (delegateLabel) delegateLabel.textContent = `Disposisikan Ulang / Alihkan dari ${selectedTicketForModal.assigned_to_name} ke:`;
+    } else {
+      // STRICT LOCK: Tiket sedang ditangani IT lain, dan user saat ini BUKAN Koordinator!
+      if (lockBanner) lockBanner.classList.add('hidden');
+      if (readOnlyBanner) {
+        readOnlyBanner.classList.remove('hidden');
+        const readOnlyName = document.getElementById('modalReadOnlyTechName');
+        if (readOnlyName) readOnlyName.textContent = selectedTicketForModal.assigned_to_name || 'Petugas Lain';
+      }
+      if (actionContainer) actionContainer.classList.add('hidden');
     }
 
     document.getElementById('modalTicketNo').textContent = selectedTicketForModal.ticket_no;
@@ -1369,16 +1403,24 @@ async function assignTechnician() {
     return;
   }
 
-  // Anti-overlap protection check
+  const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
+  const isAssignedToMe = activeUser && selectedTicketForModal.assigned_to && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name);
+
+  // Strict Lock: Non-coordinator cannot steal ticket from other technicians
+  if (selectedTicketForModal.assigned_to && !isAssignedToMe && !isCoordinator) {
+    Swal.fire('Akses Ditolak', `Tiket ini sedang dikerjakan oleh ${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}. Hanya petugas yang bersangkutan atau Koordinator IT yang berhak mendisposisikan tiket ini.`, 'error');
+    return;
+  }
+
   if (selectedTicketForModal.assigned_to && selectedTicketForModal.assigned_to != techId) {
     const confirmOverlap = await Swal.fire({
-      title: 'Peringatan Tumpang Tindih',
-      html: `Tiket ini saat ini sedang ditangani oleh <b>${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}</b>.<br><br>Apakah Anda yakin ingin mengambil alih atau mengalihkan tiket ini ke petugas lain?`,
-      icon: 'warning',
+      title: 'Konfirmasi Disposisi / Alih Tugas',
+      html: `Apakah Anda yakin ingin mengalihkan tiket ini dari <b>${selectedTicketForModal.assigned_to_name || 'Petugas Sebelumnya'}</b> ke teknisi baru?`,
+      icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Ya, Alihkan',
+      confirmButtonText: 'Ya, Alihkan Tiket',
       cancelButtonText: 'Batal',
-      confirmButtonColor: '#d97706'
+      confirmButtonColor: '#0284c7'
     });
     if (!confirmOverlap.isConfirmed) return;
   }
@@ -1410,6 +1452,16 @@ async function assignTechnician() {
 // Update Ticket Status
 async function updateTicketStatus() {
   if (!selectedTicketForModal) return;
+
+  const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
+  const isAssignedToMe = activeUser && selectedTicketForModal.assigned_to && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name);
+
+  // Strict Lock: Non-coordinator cannot update status of tickets handled by other techs
+  if (selectedTicketForModal.assigned_to && !isAssignedToMe && !isCoordinator) {
+    Swal.fire('Akses Ditolak', 'Tiket ini terkunci dan sedang ditangani oleh teknisi lain. Hanya teknisi tersebut atau Koordinator IT yang dapat memperbarui status tiket.', 'error');
+    return;
+  }
+
   const status = document.getElementById('modalNewStatus').value;
   const notes = document.getElementById('modalResolutionNotes').value;
   const proofPhotoInput = document.getElementById('modalProofPhoto');

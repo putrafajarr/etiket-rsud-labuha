@@ -65,6 +65,12 @@ public class MainActivity extends BridgeActivity {
 
         bridgeBuilder.addWebViewListener(new WebViewListener() {
             @Override
+            public void onPageLoaded(WebView webView) {
+                // Clear cache so APK always uses newest HTML/JS without stale cache
+                webView.clearCache(true);
+            }
+
+            @Override
             public void onReceivedError(WebView webView) {
                 checkServerConnectivityAndRecover();
             }

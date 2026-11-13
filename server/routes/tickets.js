@@ -235,16 +235,24 @@ router.patch('/:id/assign', async (req, res) => {
       return res.status(400).json({ error: 'ID teknisi wajib disertakan' });
     }
 
+    const currentTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
+    if (!currentTicket) {
+      return res.status(404).json({ error: 'Tiket tidak ditemukan' });
+    }
+
     const tech = await query.get('SELECT id, name, phone, email FROM users WHERE id = ?', [technician_id]);
     if (!tech) {
       return res.status(404).json({ error: 'Teknisi tidak ditemukan' });
     }
 
     const now = new Date().toISOString();
+    const actionDesc = currentTicket.assigned_to 
+      ? `Tiket didisposisikan / dialihkan dari ${currentTicket.assigned_to_name || 'Petugas Sebelumnya'} ke ${tech.name}`
+      : `Tiket diambil / dikunci oleh teknisi: ${tech.name}`;
 
     await query.run(`
       UPDATE tickets 
-      SET assigned_to = ?, assigned_to_name = ?, assigned_at = ?, status = 'assigned', updated_at = ?
+      SET assigned_to = ?, assigned_to_name = ?, assigned_at = ?, status = 'in_progress', updated_at = ?
       WHERE id = ?
     `, [tech.id, tech.name, now, now, id]);
 
