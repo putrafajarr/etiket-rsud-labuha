@@ -217,11 +217,6 @@ async function handleLogin(e) {
   }
 }
 
-function fillQuickLogin(username, password) {
-  document.getElementById('loginUsername').value = username;
-  document.getElementById('loginPassword').value = password;
-}
-
 function logoutUser() {
   Swal.fire({
     title: 'Konfirmasi Keluar',
