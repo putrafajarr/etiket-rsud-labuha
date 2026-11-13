@@ -14,7 +14,7 @@ router.get('/technicians', async (req, res) => {
         AVG(t.satisfaction_rating) as avg_rating
       FROM users u
       LEFT JOIN tickets t ON u.id = t.assigned_to
-      WHERE u.role IN ('teknisi', 'kepala_it', 'superadmin', 'admin') AND u.is_active = 1
+      WHERE u.role IN ('teknisi', 'koordinator', 'kepala_it', 'superadmin', 'admin') AND u.is_active = 1
       GROUP BY u.id, u.username, u.name, u.role, u.phone, u.email, u.specialization
       ORDER BY active_tickets ASC, u.name ASC
     `);

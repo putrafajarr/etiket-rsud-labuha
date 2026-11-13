@@ -132,36 +132,6 @@
           </div>
         </div>
 
-        <!-- Rating Section (Shown if Resolved) -->
-        <div id="ratingSection" class="hidden bg-amber-50/70 p-5 rounded-2xl border border-amber-200 text-center space-y-3">
-          <div class="w-10 h-10 bg-amber-500 text-white rounded-full flex items-center justify-center mx-auto text-lg">
-            ⭐
-          </div>
-          <div>
-            <h4 class="font-bold text-slate-800 text-sm">Bagaimana Pelayanan Teknisi IT Kami?</h4>
-            <p class="text-xs text-slate-500 mt-0.5">Beri penilaian kepuasan agar kami terus berbenah</p>
-          </div>
-
-          <div id="starContainer" class="flex justify-center space-x-2 text-2xl py-1 cursor-pointer">
-            <span onclick="setStar(1)" class="star hover:scale-125 transition text-slate-300">★</span>
-            <span onclick="setStar(2)" class="star hover:scale-125 transition text-slate-300">★</span>
-            <span onclick="setStar(3)" class="star hover:scale-125 transition text-slate-300">★</span>
-            <span onclick="setStar(4)" class="star hover:scale-125 transition text-slate-300">★</span>
-            <span onclick="setStar(5)" class="star hover:scale-125 transition text-slate-300">★</span>
-          </div>
-
-          <div id="ratingForm" class="hidden space-y-2 mt-2">
-            <input type="text" id="ratingFeedback" placeholder="Komentar atau ucapan untuk teknisi (Opsional)..." class="w-full text-xs px-3 py-2 rounded-xl border border-amber-300 focus:ring-2 focus:ring-amber-500 bg-white">
-            <button onclick="submitRating()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition shadow-md shadow-amber-600/20">
-              Kirim Penilaian Kepuasan
-            </button>
-          </div>
-
-          <div id="ratingSubmittedAlert" class="hidden text-xs text-emerald-700 font-bold">
-            ✓ Terima kasih atas penilaian bintang Anda!
-          </div>
-        </div>
-
         <!-- Activity Log Timeline -->
         <div class="border-t border-slate-100 pt-5">
           <h4 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center">
@@ -273,19 +243,6 @@
       if (hasPhotos) photosSection.classList.remove('hidden');
       else photosSection.classList.add('hidden');
 
-      // Rating Section
-      const ratingSec = document.getElementById('ratingSection');
-      if (ticket.status === 'resolved' || ticket.status === 'closed') {
-        ratingSec.classList.remove('hidden');
-        if (ticket.satisfaction_rating) {
-          showSubmittedRating(ticket.satisfaction_rating);
-        } else {
-          resetRatingStars();
-        }
-      } else {
-        ratingSec.classList.add('hidden');
-      }
-
       // Render Logs
       const timeline = document.getElementById('timelineList');
       timeline.innerHTML = '';
@@ -309,78 +266,6 @@
       }
 
       lucide.createIcons();
-    }
-
-    function setStar(rating) {
-      if (currentTicket && currentTicket.satisfaction_rating) return;
-      selectedRating = rating;
-      const stars = document.querySelectorAll('.star');
-      stars.forEach((s, idx) => {
-        if (idx < rating) {
-          s.classList.remove('text-slate-300');
-          s.classList.add('text-amber-400');
-        } else {
-          s.classList.remove('text-amber-400');
-          s.classList.add('text-slate-300');
-        }
-      });
-      document.getElementById('ratingForm').classList.remove('hidden');
-    }
-
-    function resetRatingStars() {
-      const stars = document.querySelectorAll('.star');
-      stars.forEach(s => {
-        s.classList.remove('text-amber-400');
-        s.classList.add('text-slate-300');
-      });
-      document.getElementById('ratingForm').classList.add('hidden');
-      document.getElementById('ratingSubmittedAlert').classList.add('hidden');
-    }
-
-    function showSubmittedRating(rating) {
-      const stars = document.querySelectorAll('.star');
-      stars.forEach((s, idx) => {
-        if (idx < rating) {
-          s.classList.add('text-amber-400');
-          s.classList.remove('text-slate-300');
-        } else {
-          s.classList.remove('text-amber-400');
-          s.classList.add('text-slate-300');
-        }
-      });
-      document.getElementById('ratingForm').classList.add('hidden');
-      document.getElementById('ratingSubmittedAlert').classList.remove('hidden');
-    }
-
-    async function submitRating() {
-      if (!currentTicket || !selectedRating) return;
-      const feedback = document.getElementById('ratingFeedback').value.trim();
-
-      try {
-        const res = await fetch(`/api/tickets/${currentTicket.id}/rate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rating: selectedRating, feedback })
-        });
-        if (!res.ok) throw new Error('Gagal menyimpan penilaian');
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Terima Kasih!',
-          text: 'Penilaian kepuasan Anda telah berhasil disimpan.',
-          confirmButtonColor: '#0284c7'
-        });
-
-        currentTicket.satisfaction_rating = selectedRating;
-        showSubmittedRating(selectedRating);
-      } catch (err) {
-        Swal.fire({
-          icon: 'error',
-          title: 'Gagal',
-          text: err.message,
-          confirmButtonColor: '#0284c7'
-        });
-      }
     }
   </script>
 </body>

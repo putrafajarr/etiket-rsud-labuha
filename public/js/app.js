@@ -230,8 +230,19 @@ function logoutUser() {
   }).then(result => {
     if (result.isConfirmed) {
       localStorage.removeItem('etiket_token');
-      document.getElementById('loginOverlay').classList.remove('hidden');
-      document.getElementById('loginPassword').value = '';
+      closeMobileMenu();
+      const loginOverlay = document.getElementById('loginOverlay');
+      if (loginOverlay) loginOverlay.classList.remove('hidden');
+      const pwd = document.getElementById('loginPassword');
+      if (pwd) pwd.value = '';
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: 'Berhasil Logout',
+        showConfirmButton: false,
+        timer: 1500
+      });
     }
   });
 }
@@ -336,6 +347,55 @@ function startAutoSync() {
             showConfirmButton: false,
             timer: 5000,
             timerProgressBar: true
+          });
+        } else {
+          // Detect changes in existing tickets (claimed by another tech or status resolved)
+          freshTickets.forEach(ft => {
+            const oldT = (allTickets || []).find(ot => ot.id === ft.id);
+            if (oldT) {
+              // 1. Someone claimed the ticket
+              if (ft.assigned_to && ft.assigned_to !== oldT.assigned_to) {
+                const isMe = activeUser && (ft.assigned_to === activeUser.id || ft.assigned_to_name === activeUser.name);
+                if (!isMe) {
+                  Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    title: `🔒 Tiket Diambil: ${ft.room_name}`,
+                    text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Teknisi lain'}`,
+                    showConfirmButton: false,
+                    timer: 4500,
+                    timerProgressBar: true
+                  });
+                }
+              }
+              // 2. Status updated to resolved
+              if (ft.status !== oldT.status) {
+                if (ft.status === 'resolved' || ft.status === 'closed') {
+                  if (window.soundAlert) window.soundAlert.playSuccess();
+                  Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: `✅ Selesai: ${ft.room_name}`,
+                    text: `${ft.ticket_no} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                    showConfirmButton: false,
+                    timer: 4500,
+                    timerProgressBar: true
+                  });
+                } else if (ft.status === 'in_progress' && oldT.status === 'open') {
+                  Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    title: `⚙️ Sedang Dikerjakan: ${ft.room_name}`,
+                    text: `${ft.ticket_no} mulai dikerjakan (${ft.assigned_to_name || 'Tim IT'})`,
+                    showConfirmButton: false,
+                    timer: 4000
+                  });
+                }
+              }
+            }
           });
         }
 
@@ -605,7 +665,7 @@ function renderTickets() {
       </div>
       <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
         <span class="truncate max-w-[100px]">👤 ${t.reporter_name}</span>
-        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">⭐ Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + (t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
+        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + (t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
       </div>
     `;
 
@@ -636,7 +696,7 @@ function renderTickets() {
       <td class="p-3.5">${priorityBadge}</td>
       <td class="p-3.5 text-slate-700">${t.reporter_name}</td>
       <td class="p-3.5 font-medium text-slate-800 max-w-xs truncate">${t.title}</td>
-      <td class="p-3.5 font-semibold">${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">⭐ ' + t.assigned_to_name + ' (Anda)</span>' : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + t.assigned_to_name + '</span>') : '<span class="text-rose-500 font-bold text-xs bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">⏳ Belum Ditugaskan</span>'}</td>
+      <td class="p-3.5 font-semibold">${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 ' + t.assigned_to_name + ' (Anda)</span>' : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + t.assigned_to_name + '</span>') : '<span class="text-rose-500 font-bold text-xs bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">⏳ Belum Ditugaskan</span>'}</td>
       <td class="p-3.5 uppercase font-bold text-[10px] text-slate-600">${t.status.replace('_', ' ')}</td>
       <td class="p-3.5 text-center">
         <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-2.5 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-bold">Aksi</button>
@@ -924,12 +984,11 @@ async function loadUsers() {
 
     allUsersData.forEach(u => {
       const roleBadge = {
-        superadmin: '<span class="bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Super Admin</span>',
-        kepala_it: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Ka. SIMRS / IT</span>',
-        helpdesk: '<span class="bg-sky-100 text-sky-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Helpdesk</span>',
-        teknisi: '<span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Teknisi IT</span>',
-        user_ruangan: '<span class="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Staf Ruangan</span>'
-      }[u.role] || u.role;
+        koordinator: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Koordinator IT</span>',
+        kepala_it: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Koordinator IT</span>',
+        superadmin: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Koordinator IT</span>',
+        teknisi: '<span class="bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">Teknisi IT</span>'
+      }[u.role] || `<span class="bg-slate-100 text-slate-700 font-bold px-2 py-0.5 rounded text-[10px] uppercase">${u.role}</span>`;
 
       const statusBadge = u.is_active === 1
         ? '<span class="text-emerald-600 font-bold">● Aktif</span>'
@@ -986,7 +1045,7 @@ function openEditUserModal(userId) {
   document.getElementById('userFullName').value = user.name;
   document.getElementById('userUsername').value = user.username;
   document.getElementById('userUsername').disabled = false;
-  document.getElementById('userRole').value = user.role;
+  document.getElementById('userRole').value = (user.role === 'koordinator' || user.role === 'kepala_it' || user.role === 'superadmin') ? 'koordinator' : 'teknisi';
   document.getElementById('userPassword').value = '';
   document.getElementById('userPassword').required = false;
   document.getElementById('pwdReqSpan').classList.add('hidden');
@@ -1116,7 +1175,7 @@ async function loadTechnicians() {
     if (select) {
       select.innerHTML = '<option value="">-- Pilih Petugas / Teknisi IT --</option>';
       allTechnicians.forEach(t => {
-        const roleLabel = t.role === 'kepala_it' ? 'Koordinator IT' : (t.role === 'superadmin' ? 'Super Admin' : 'Teknisi');
+        const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
         const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
         select.innerHTML += `<option value="${t.id}">${t.name} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
       });
@@ -1130,16 +1189,62 @@ async function loadTechnicians() {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td class="p-3 font-bold text-slate-800">${t.name} <span class="text-[10px] text-slate-400">(@${t.username})</span></td>
-          <td class="p-3 text-slate-500">${t.specialization || (t.role === 'kepala_it' ? 'Koordinator SIMRS' : 'Umum')}</td>
+          <td class="p-3 text-slate-500">${t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT')}</td>
           <td class="p-3 font-bold text-amber-600">${t.active_tickets || 0} Tiket</td>
           <td class="p-3 font-bold text-emerald-600">${t.resolved_tickets || 0} Tiket Selesai</td>
-          <td class="p-3 text-amber-500 font-bold">⭐ ${t.avg_rating ? parseFloat(t.avg_rating).toFixed(1) : '5.0'} / 5.0</td>
         `;
         tbody.appendChild(tr);
       });
     }
   } catch (err) {
     console.error('Failed to load technicians:', err);
+  }
+}
+
+// Quick 1-Click Ticket Claim (Otomatis Ambil Tiket oleh Akun yang Login)
+async function claimTicketSelf() {
+  if (!selectedTicketForModal) return;
+  if (!activeUser || !activeUser.id) {
+    Swal.fire('Info', 'Sesi login tidak terdeteksi. Silakan login terlebih dahulu.', 'info');
+    return;
+  }
+
+  // Anti-overlap check: if someone else has already claimed it
+  if (selectedTicketForModal.assigned_to && selectedTicketForModal.assigned_to != activeUser.id) {
+    const confirmOverlap = await Swal.fire({
+      title: 'Peringatan Tumpang Tindih',
+      html: `Tiket ini saat ini sedang ditangani oleh <b>${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}</b>.<br><br>Apakah Anda yakin ingin mengambil alih tiket ini?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Ambil Alih',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#d97706'
+    });
+    if (!confirmOverlap.isConfirmed) return;
+  }
+
+  try {
+    const res = await fetch(`/api/tickets/${selectedTicketForModal.id}/assign`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ technician_id: activeUser.id, assigned_by_name: activeUser.name })
+    });
+    if (!res.ok) throw new Error('Gagal mengambil tiket');
+
+    Swal.fire({
+      icon: 'success',
+      title: 'Tiket Berhasil Anda Ambil!',
+      text: `Tiket ${selectedTicketForModal.ticket_no} telah terkunci atas nama Anda. Rekan IT lain otomatis terupdate.`,
+      timer: 2000,
+      showConfirmButton: false
+    });
+
+    closeModal();
+    loadTickets();
+    loadStats();
+    if (currentTab === 'technician') loadTechnicianTickets();
+  } catch (err) {
+    Swal.fire('Error', err.message, 'error');
   }
 }
 
@@ -1198,7 +1303,7 @@ async function openTicketModal(ticketId) {
           const iconBox = lockBanner.querySelector('div');
           if (iconBox) {
             iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
-            iconBox.textContent = '⭐';
+            iconBox.textContent = '👤';
           }
           lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani.`;
         } else {

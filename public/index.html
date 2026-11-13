@@ -74,21 +74,23 @@
           <span class="sm:hidden text-[11px]">Lapor</span>
         </a>
 
+        <!-- Logout Button (Directly visible on Mobile & Desktop) -->
+        <button onclick="logoutUser()" title="Keluar / Logout" class="p-2 sm:px-3 sm:py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition flex items-center space-x-1.5 text-xs font-bold active:scale-95 shrink-0">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Keluar</span>
+        </button>
+
         <!-- Mobile Drawer Hamburger Toggle Button -->
-        <button type="button" onclick="toggleMobileMenu()" title="Buka Menu Navigasi" class="lg:hidden p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition flex items-center justify-center">
+        <button type="button" onclick="toggleMobileMenu()" title="Buka Menu Navigasi" class="lg:hidden p-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition flex items-center justify-center shrink-0">
           <i data-lucide="menu" class="w-5 h-5"></i>
         </button>
 
-        <!-- Logged In User Profile & Logout (Desktop Only) -->
+        <!-- Logged In User Profile (Desktop Only) -->
         <div id="userProfileBar" class="hidden lg:flex items-center space-x-2 pl-2 border-l border-slate-200">
           <div class="text-right">
             <span id="navUserName" class="block text-xs font-bold text-slate-800 leading-tight">Memuat...</span>
             <span id="navUserRole" class="block text-[10px] font-semibold text-sky-600 uppercase">PETUGAS IT</span>
           </div>
-          <button onclick="logoutUser()" title="Keluar / Logout" class="p-2 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 transition flex items-center space-x-1 text-xs font-bold">
-            <i data-lucide="log-out" class="w-4 h-4"></i>
-            <span>Keluar</span>
-          </button>
         </div>
       </div>
     </div>
@@ -231,6 +233,14 @@
           <span class="text-xs font-bold text-slate-700">Realtime WebSocket</span>
         </div>
         <p class="text-[10px] text-slate-400 mt-1">Terhubung ke Server RSUD Labuha</p>
+      </div>
+
+      <!-- Sidebar Logout Button -->
+      <div class="px-3 pb-3">
+        <button onclick="logoutUser()" class="w-full py-2.5 px-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl font-bold text-xs flex items-center justify-center space-x-2 transition border border-rose-200 active:scale-95">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          <span>Keluar / Logout</span>
+        </button>
       </div>
     </aside>
 
@@ -491,7 +501,6 @@
                   <th class="p-3">Spesialisasi</th>
                   <th class="p-3">Tiket Sedang Aktif</th>
                   <th class="p-3">Tiket Selesai</th>
-                  <th class="p-3">Rating Kepuasan</th>
                 </tr>
               </thead>
               <tbody id="techLeaderboardBody" class="divide-y divide-slate-100"></tbody>
@@ -839,18 +848,29 @@
         <!-- Disposisi / Assign Section -->
         <div class="border-t pt-4 space-y-3">
           <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-            1. Disposisi Teknisi Penanggung Jawab
+            1. Penanganan & Disposisi Teknisi
           </label>
-          <div class="flex flex-col sm:flex-row gap-2">
-            <select id="modalAssignTech" class="flex-1 text-xs p-2.5 border rounded-xl bg-white font-medium">
-              <option value="">-- Pilih Petugas / Teknisi IT --</option>
-            </select>
-            <div class="flex space-x-2 shrink-0">
-              <button type="button" onclick="assignToSelf()" title="Pilih Akun Saya Sendiri" class="flex-1 sm:flex-initial px-3 py-2 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 text-xs font-bold rounded-xl transition border border-slate-200 flex items-center justify-center space-x-1 active:scale-95">
-                <i data-lucide="user-check" class="w-3.5 h-3.5 text-sky-600"></i>
-                <span>Saya Sendiri</span>
-              </button>
-              <button type="button" onclick="assignTechnician()" class="flex-1 sm:flex-initial px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm active:scale-95">
+          
+          <!-- Tombol Cepat: Ambil Tiket Ini (1 Klik Otomatis Sesuai Akun Login) -->
+          <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            <div>
+              <span class="font-bold text-xs text-emerald-950 block">Tangani Tiket Ini Langsung?</span>
+              <span class="text-[11px] text-emerald-700">Kunci tiket ini atas nama Anda agar rekan IT lain tahu Anda sedang bergerak.</span>
+            </div>
+            <button type="button" onclick="claimTicketSelf()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-1.5 active:scale-95 shrink-0">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Ambil Tiket Ini</span>
+            </button>
+          </div>
+
+          <!-- Opsi Disposisi ke Petugas Lain (Untuk Koordinator / Pendelegasian) -->
+          <div class="pt-1">
+            <span class="text-[11px] font-semibold text-slate-500 mb-1 block">Atau Disposisikan ke Petugas Lain:</span>
+            <div class="flex flex-col sm:flex-row gap-2">
+              <select id="modalAssignTech" class="flex-1 text-xs p-2.5 border rounded-xl bg-white font-medium">
+                <option value="">-- Pilih Petugas / Teknisi IT --</option>
+              </select>
+              <button type="button" onclick="assignTechnician()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm active:scale-95 shrink-0">
                 Tugaskan
               </button>
             </div>
@@ -991,13 +1011,10 @@
             <input type="text" id="userUsername" required placeholder="Contoh: ahmad.it" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-xs font-mono">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Peran / Role <span class="text-rose-500">*</span></label>
+            <label class="block font-bold text-slate-700 mb-1">Jabatan / Peran <span class="text-rose-500">*</span></label>
             <select id="userRole" required class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-xs bg-white font-bold">
-              <option value="teknisi">👨‍🔧 Teknisi IT Lapangan</option>
-              <option value="helpdesk">🎧 Helpdesk IT Dispatcher</option>
-              <option value="kepala_it">👔 Kepala Seksi SIMRS / IT</option>
-              <option value="superadmin">👑 Super Administrator</option>
-              <option value="user_ruangan">🏥 User Ruangan / Poli</option>
+              <option value="teknisi">👨‍🔧 Teknisi IT</option>
+              <option value="koordinator">👔 Koordinator IT</option>
             </select>
           </div>
         </div>

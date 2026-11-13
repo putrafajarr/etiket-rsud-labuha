@@ -114,12 +114,11 @@ class NotificationManager {
    * Handle Notification when ticket is marked as resolved
    */
   static async notifyTicketResolved(ticket, io = null) {
-    // 1. WhatsApp to Reporter with rating invitation
+    // 1. WhatsApp to Reporter
     const waMessage = `*PERBAIKAN SELESAI - RSUD LABUHA*\n` +
       `Halo *${ticket.reporter_name}*,\n` +
       `Kendala IT di *${ticket.room_name}* dengan nomor tiket *${ticket.ticket_no}* telah dinyatakan *SELESAI DIPERBAIKI* oleh teknisi (${ticket.assigned_to_name || 'Tim IT'}).\n\n` +
       `Catatan Perbaikan: ${ticket.resolution_notes || 'Perangkat/jaringan telah normal kembali.'}\n\n` +
-      `Mohon bantu kami meningkatkan kualitas layanan IT dengan memberikan rating kepuasan (1-5 bintang) di aplikasi atau web.\n` +
       `Terima kasih atas kerja samanya.\n\n` +
       `_Tim IT & SIMRS RSUD Labuha_`;
 
