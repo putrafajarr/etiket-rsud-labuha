@@ -313,17 +313,18 @@ function toggleMobileMenu() {
   const backdrop = document.getElementById('mobileDrawerBackdrop');
   if (!drawer || !backdrop) return;
 
-  const isOpen = !drawer.classList.contains('translate-x-full');
+  const isOpen = drawer.classList.contains('open');
   if (isOpen) {
     closeMobileMenu();
   } else {
+    const user = activeUser || {};
     const userNameEl = document.getElementById('drawerUserName');
     const userRoleEl = document.getElementById('drawerUserRole');
-    if (userNameEl && currentUser) userNameEl.textContent = currentUser.name || currentUser.username;
-    if (userRoleEl && currentUser) userRoleEl.textContent = (currentUser.role || 'PETUGAS IT').toUpperCase();
+    if (userNameEl) userNameEl.textContent = user.name || user.username || 'Petugas IT';
+    if (userRoleEl) userRoleEl.textContent = (user.role || 'PETUGAS IT').toUpperCase();
 
-    backdrop.classList.remove('hidden');
-    drawer.classList.remove('translate-x-full');
+    backdrop.classList.add('open');
+    drawer.classList.add('open');
     lucide.createIcons();
   }
 }
@@ -331,14 +332,53 @@ function toggleMobileMenu() {
 function closeMobileMenu() {
   const drawer = document.getElementById('mobileDrawer');
   const backdrop = document.getElementById('mobileDrawerBackdrop');
-  if (drawer) drawer.classList.add('translate-x-full');
-  if (backdrop) backdrop.classList.add('hidden');
+  if (drawer) drawer.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('open');
 }
+
+// Global App Back Button Handler (Physical Back Key & UI Button)
+window.handleAppBack = function() {
+  // 1. If mobile drawer is open, close it
+  const drawer = document.getElementById('mobileDrawer');
+  if (drawer && drawer.classList.contains('open')) {
+    closeMobileMenu();
+    return true;
+  }
+
+  // 2. If any modal is open, close it
+  const modals = ['ticketModal', 'addRoomModal', 'userModal'];
+  for (const mId of modals) {
+    const m = document.getElementById(mId);
+    if (m && !m.classList.contains('hidden')) {
+      m.classList.add('hidden');
+      return true;
+    }
+  }
+
+  // 3. If currently on a sub-view (not tickets), return to tickets dashboard
+  if (currentTab !== 'tickets') {
+    switchTab('tickets');
+    return true;
+  }
+
+  return false;
+};
 
 // Switch view tabs
 function switchTab(tab) {
   currentTab = tab;
   closeMobileMenu();
+
+  // Control Back button in top header
+  const btnBack = document.getElementById('btnHeaderBack');
+  if (btnBack) {
+    if (tab === 'tickets') {
+      btnBack.classList.add('hidden');
+    } else {
+      btnBack.classList.remove('hidden');
+    }
+  }
+
   const tabs = ['tickets', 'technician', 'reports', 'rooms', 'users', 'gateway', 'logs'];
   tabs.forEach(t => {
     const el = document.getElementById(`view-${t}`);
@@ -915,28 +955,55 @@ async function loadTechnicians() {
     allTechnicians = await res.json();
 
     const select = document.getElementById('modalAssignTech');
-    select.innerHTML = '<option value="">-- Pilih Teknisi IT --</option>';
-    allTechnicians.forEach(t => {
-      select.innerHTML += `<option value="${t.id}">${t.name} (Tugas aktif: ${t.active_tickets || 0})</option>`;
-    });
+    if (select) {
+      select.innerHTML = '<option value="">-- Pilih Petugas / Teknisi IT --</option>';
+      allTechnicians.forEach(t => {
+        const roleLabel = t.role === 'kepala_it' ? 'Koordinator IT' : (t.role === 'superadmin' ? 'Super Admin' : 'Teknisi');
+        const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
+        select.innerHTML += `<option value="${t.id}">${t.name} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
+      });
+    }
 
     // Populate Leaderboard in Reports
     const tbody = document.getElementById('techLeaderboardBody');
-    tbody.innerHTML = '';
-    allTechnicians.forEach(t => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td class="p-3 font-bold text-slate-800">${t.name}</td>
-        <td class="p-3 text-slate-500">${t.specialization || 'Umum'}</td>
-        <td class="p-3 font-bold text-amber-600">${t.active_tickets || 0} Tiket</td>
-        <td class="p-3 font-bold text-emerald-600">${t.resolved_tickets || 0} Tiket Selesai</td>
-        <td class="p-3 text-amber-500 font-bold">⭐ ${t.avg_rating ? parseFloat(t.avg_rating).toFixed(1) : '5.0'} / 5.0</td>
-      `;
-      tbody.appendChild(tr);
-    });
+    if (tbody) {
+      tbody.innerHTML = '';
+      allTechnicians.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-3 font-bold text-slate-800">${t.name} <span class="text-[10px] text-slate-400">(@${t.username})</span></td>
+          <td class="p-3 text-slate-500">${t.specialization || (t.role === 'kepala_it' ? 'Koordinator SIMRS' : 'Umum')}</td>
+          <td class="p-3 font-bold text-amber-600">${t.active_tickets || 0} Tiket</td>
+          <td class="p-3 font-bold text-emerald-600">${t.resolved_tickets || 0} Tiket Selesai</td>
+          <td class="p-3 text-amber-500 font-bold">⭐ ${t.avg_rating ? parseFloat(t.avg_rating).toFixed(1) : '5.0'} / 5.0</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
   } catch (err) {
     console.error('Failed to load technicians:', err);
   }
+}
+
+// Quick Assign to Logged-in User
+function assignToSelf() {
+  const select = document.getElementById('modalAssignTech');
+  if (!select || !activeUser || !activeUser.id) return;
+  select.value = String(activeUser.id);
+  if (!select.value) {
+    const opt = document.createElement('option');
+    opt.value = String(activeUser.id);
+    opt.textContent = `${activeUser.name} [Akun Anda]`;
+    opt.selected = true;
+    select.appendChild(opt);
+  }
+  Swal.fire({
+    icon: 'info',
+    title: 'Akun Dipilih',
+    text: `Tiket akan ditugaskan kepada Anda: ${activeUser.name}`,
+    timer: 1200,
+    showConfirmButton: false
+  });
 }
 
 // Load KPI Stats
@@ -1076,6 +1143,12 @@ async function updateTicketStatus() {
 function loadTechnicianTickets() {
   const container = document.getElementById('techTicketList');
   container.innerHTML = '';
+
+  const techNameEl = document.getElementById('techDisplayName');
+  if (techNameEl) {
+    const roleLabel = activeUser.role === 'kepala_it' ? 'Koordinator SIMRS & IT' : (activeUser.role === 'superadmin' ? 'Super Admin' : 'Teknisi IT');
+    techNameEl.textContent = `${activeUser.name || activeUser.username} (${roleLabel})`;
+  }
 
   const myTickets = allTickets.filter(t => t.assigned_to === activeUser.id && t.status !== 'closed');
   document.getElementById('techActiveCount').textContent = myTickets.length;

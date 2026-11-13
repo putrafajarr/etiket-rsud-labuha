@@ -3,19 +3,19 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { query } = require('../config/db');
 
-// GET all technicians with active task counts
+// GET all technicians / IT staff for assignment
 router.get('/technicians', async (req, res) => {
   try {
     const technicians = await query.all(`
       SELECT 
-        u.id, u.name, u.phone, u.email, u.specialization,
+        u.id, u.username, u.name, u.role, u.phone, u.email, u.specialization,
         COUNT(CASE WHEN t.status IN ('assigned', 'in_progress') THEN 1 END) as active_tickets,
         COUNT(CASE WHEN t.status IN ('resolved', 'closed') THEN 1 END) as resolved_tickets,
         AVG(t.satisfaction_rating) as avg_rating
       FROM users u
       LEFT JOIN tickets t ON u.id = t.assigned_to
-      WHERE u.role = 'teknisi' AND u.is_active = 1
-      GROUP BY u.id
+      WHERE u.role IN ('teknisi', 'kepala_it', 'superadmin', 'admin') AND u.is_active = 1
+      GROUP BY u.id, u.username, u.name, u.role, u.phone, u.email, u.specialization
       ORDER BY active_tickets ASC, u.name ASC
     `);
 

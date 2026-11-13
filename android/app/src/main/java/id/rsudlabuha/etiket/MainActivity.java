@@ -187,4 +187,28 @@ public class MainActivity extends BridgeActivity {
                 .show();
         });
     }
+
+    @Override
+    public void onBackPressed() {
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            WebView wv = getBridge().getWebView();
+            wv.evaluateJavascript(
+                "(function() { " +
+                "  if (typeof window.handleAppBack === 'function') { return window.handleAppBack(); } " +
+                "  return false; " +
+                "})()",
+                result -> {
+                    if (!"true".equals(result)) {
+                        if (wv.canGoBack()) {
+                            wv.goBack();
+                        } else {
+                            MainActivity.super.onBackPressed();
+                        }
+                    }
+                }
+            );
+        } else {
+            super.onBackPressed();
+        }
+    }
 }

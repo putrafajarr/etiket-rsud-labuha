@@ -30,6 +30,12 @@
     <div class="px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
       <!-- Brand & Hospital Info -->
       <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+        <!-- Mobile Back Button (Appears when in sub-tab) -->
+        <button id="btnHeaderBack" type="button" onclick="handleAppBack()" class="hidden p-2 -ml-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center space-x-1.5 transition active:scale-95 shrink-0" title="Kembali ke Dashboard">
+          <i data-lucide="arrow-left" class="w-4 h-4 text-sky-700"></i>
+          <span class="text-xs font-bold text-slate-800">Kembali</span>
+        </button>
+
         <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 text-white flex items-center justify-center font-black text-sm sm:text-lg shadow-md shadow-sky-600/20 shrink-0">
           🏥
         </div>
@@ -89,8 +95,8 @@
   </header>
 
   <!-- Mobile Drawer Backdrop & Slide-Over Panel -->
-  <div id="mobileDrawerBackdrop" onclick="toggleMobileMenu()" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 lg:hidden transition-opacity"></div>
-  <div id="mobileDrawer" class="fixed top-0 bottom-0 right-0 w-72 max-w-[85vw] bg-white z-50 shadow-2xl flex flex-col justify-between transform translate-x-full transition-transform duration-300 ease-in-out lg:hidden">
+  <div id="mobileDrawerBackdrop" onclick="closeMobileMenu()"></div>
+  <div id="mobileDrawer">
     <!-- Drawer Header with User Profile -->
     <div class="p-4 bg-gradient-to-r from-sky-700 via-sky-600 to-teal-600 text-white flex items-center justify-between shrink-0">
       <div class="flex items-center space-x-2.5 min-w-0">
@@ -400,7 +406,7 @@
         <div class="bg-gradient-to-r from-sky-700 to-teal-700 text-white p-5 rounded-2xl shadow-lg flex items-center justify-between">
           <div>
             <span class="text-xs text-sky-200 uppercase font-bold tracking-wider">Mode Lapangan</span>
-            <h2 id="techDisplayName" class="text-lg font-black mt-0.5">Ahmad Fauzi (Teknisi)</h2>
+            <h2 id="techDisplayName" class="text-lg font-black mt-0.5">Petugas IT</h2>
             <p class="text-xs text-sky-100 mt-1">Daftar tugas keliling ruangan & bangsal RSUD Labuha</p>
           </div>
           <div class="text-right">
@@ -784,13 +790,13 @@
       <i data-lucide="door-open"></i>
       <span>Ruangan</span>
     </button>
-    <button type="button" onclick="switchTab('users')" id="mob-users" class="mob-nav-btn">
-      <i data-lucide="users"></i>
-      <span>Akun IT</span>
+    <button type="button" onclick="switchTab('reports')" id="mob-reports" class="mob-nav-btn">
+      <i data-lucide="bar-chart-3"></i>
+      <span>Laporan</span>
     </button>
-    <button type="button" onclick="switchTab('technician')" id="mob-technician" class="mob-nav-btn">
-      <i data-lucide="smartphone"></i>
-      <span>Teknisi</span>
+    <button type="button" onclick="switchTab('gateway')" id="mob-gateway" class="mob-nav-btn">
+      <i data-lucide="settings"></i>
+      <span>Gateway</span>
     </button>
     <button type="button" onclick="toggleMobileMenu()" id="mob-menu" class="mob-nav-btn">
       <i data-lucide="menu"></i>
@@ -847,13 +853,19 @@
           <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
             1. Disposisi Teknisi Penanggung Jawab
           </label>
-          <div class="flex space-x-2">
+          <div class="flex flex-col sm:flex-row gap-2">
             <select id="modalAssignTech" class="flex-1 text-xs p-2.5 border rounded-xl bg-white font-medium">
-              <option value="">-- Pilih Teknisi IT --</option>
+              <option value="">-- Pilih Petugas / Teknisi IT --</option>
             </select>
-            <button onclick="assignTechnician()" class="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
-              Tugaskan
-            </button>
+            <div class="flex space-x-2 shrink-0">
+              <button type="button" onclick="assignToSelf()" title="Pilih Akun Saya Sendiri" class="flex-1 sm:flex-initial px-3 py-2 bg-slate-100 hover:bg-sky-50 text-slate-700 hover:text-sky-700 text-xs font-bold rounded-xl transition border border-slate-200 flex items-center justify-center space-x-1 active:scale-95">
+                <i data-lucide="user-check" class="w-3.5 h-3.5 text-sky-600"></i>
+                <span>Saya Sendiri</span>
+              </button>
+              <button type="button" onclick="assignTechnician()" class="flex-1 sm:flex-initial px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm active:scale-95">
+                Tugaskan
+              </button>
+            </div>
           </div>
         </div>
 
