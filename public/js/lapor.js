@@ -293,3 +293,12 @@ function setupForm() {
   });
 }
 
+// Bersihkan badge Netlify secara otomatis jika terinjeksi
+(() => {
+  const purgeNetlify = () => {
+    document.querySelectorAll('[id*="netlify"], [class*="netlify"], iframe[src*="netlify"], netlify-drawer').forEach(el => el.remove());
+  };
+  purgeNetlify();
+  setInterval(purgeNetlify, 1500);
+})();
+

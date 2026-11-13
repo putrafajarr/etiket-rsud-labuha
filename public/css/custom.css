@@ -301,4 +301,44 @@ iframe[src*="netlify"] {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Tampilan Input Tanggal Kalender Sangat Rapi & Seragam di Semua HP Android */
+input[type="date"] {
+  display: block !important;
+  width: 100% !important;
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  box-sizing: border-box !important;
+  outline: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+input[type="date"]:focus {
+  border-color: #0284c7 !important;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.18) !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer !important;
+  padding: 4px !important;
+  filter: invert(0.3) sepia(1) saturate(5) hue-rotate(175deg) !important;
+  transform: scale(1.15) !important;
+}
+
+input[type="date"]::-webkit-datetime-edit {
+  padding: 2px 0 !important;
+}
+
+input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0 !important;
+}
+
 

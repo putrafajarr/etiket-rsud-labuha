@@ -1290,11 +1290,11 @@ async function loadUsers() {
 
     allUsersData.forEach(u => {
       const roleBadge = {
-        koordinator: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase whitespace-nowrap inline-block">Koordinator IT</span>',
-        kepala_it: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase whitespace-nowrap inline-block">Koordinator IT</span>',
-        superadmin: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase whitespace-nowrap inline-block">Koordinator IT</span>',
-        teknisi: '<span class="bg-emerald-100 text-emerald-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase whitespace-nowrap inline-block">Teknisi IT</span>'
-      }[u.role] || `<span class="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10px] uppercase whitespace-nowrap inline-block">${u.role}</span>`;
+        koordinator: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
+        kepala_it: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
+        superadmin: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
+        teknisi: '<span class="bg-emerald-100 text-emerald-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Teknisi IT</span>'
+      }[u.role] || `<span class="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">${u.role}</span>`;
 
       const statusBadge = u.is_active === 1
         ? '<span class="text-emerald-600 font-bold whitespace-nowrap">● Aktif</span>'
@@ -2057,82 +2057,370 @@ function onReportDateChange() {
   loadReportsData();
 }
 
-// Load Reports Charts
-async function loadReportsData() {
+// Load Reports Charts (Real-Time from Memory with Smooth Update)
+function loadReportsData() {
   try {
     const start = document.getElementById('reportStartDate')?.value || '';
     const end = document.getElementById('reportEndDate')?.value || '';
-    let url = '/api/reports/stats';
-    const params = [];
-    if (start) params.push(`startDate=${encodeURIComponent(start)}`);
-    if (end) params.push(`endDate=${encodeURIComponent(end)}`);
-    if (params.length > 0) url += `?${params.join('&')}`;
 
-    const res = await smartFetch(url);
-    if (!res || !res.ok) return;
-    const stats = await res.json();
-    if (!stats) return;
+    // Filter tickets based on date range
+    let tickets = (allTickets || []).slice();
+    if (start) {
+      const sTime = new Date(start + 'T00:00:00').getTime();
+      tickets = tickets.filter(t => new Date(t.created_at).getTime() >= sTime);
+    }
+    if (end) {
+      const eTime = new Date(end + 'T23:59:59').getTime();
+      tickets = tickets.filter(t => new Date(t.created_at).getTime() <= eTime);
+    }
+
+    // Category Counts
+    const catMap = {};
+    const roomMap = {};
+    tickets.forEach(t => {
+      const cat = t.category_name || 'SIMRS & IT';
+      catMap[cat] = (catMap[cat] || 0) + 1;
+      const room = (t.room_name || 'Ruangan').split('(')[0].trim();
+      roomMap[room] = (roomMap[room] || 0) + 1;
+    });
+
+    const catLabels = Object.keys(catMap);
+    const catCounts = Object.values(catMap);
+
+    const sortedRooms = Object.entries(roomMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+    const roomLabels = sortedRooms.map(r => r[0]);
+    const roomCounts = sortedRooms.map(r => r[1]);
 
     if (typeof Chart === 'undefined') return;
 
-    // Category Chart
+    // Category Doughnut Chart
     const canvasCat = document.getElementById('categoryChart');
     if (canvasCat) {
       const ctxCat = canvasCat.getContext('2d');
-      if (categoryChartInstance) categoryChartInstance.destroy();
-
-      const catLabels = (stats.categoryStats || []).map(c => c.category_name);
-      const catCounts = (stats.categoryStats || []).map(c => c.count);
-
-      categoryChartInstance = new Chart(ctxCat, {
-        type: 'doughnut',
-        data: {
-          labels: catLabels,
-          datasets: [{
-            data: catCounts,
-            backgroundColor: ['#0284c7', '#0d9488', '#f59e0b', '#dc2626', '#8b5cf6', '#64748b']
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } }
-        }
-      });
+      if (categoryChartInstance) {
+        categoryChartInstance.data.labels = catLabels.length > 0 ? catLabels : ['Belum Ada Data'];
+        categoryChartInstance.data.datasets[0].data = catCounts.length > 0 ? catCounts : [0];
+        categoryChartInstance.update('none');
+      } else {
+        categoryChartInstance = new Chart(ctxCat, {
+          type: 'doughnut',
+          data: {
+            labels: catLabels.length > 0 ? catLabels : ['Belum Ada Data'],
+            datasets: [{
+              data: catCounts.length > 0 ? catCounts : [1],
+              backgroundColor: ['#0284c7', '#0d9488', '#f59e0b', '#dc2626', '#8b5cf6', '#64748b']
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { boxWidth: 12, font: { size: 10 } }
+              }
+            }
+          }
+        });
+      }
     }
 
-    // Room Chart
+    // Top Rooms Bar Chart
     const canvasRoom = document.getElementById('roomChart');
     if (canvasRoom) {
       const ctxRoom = canvasRoom.getContext('2d');
-      if (roomChartInstance) roomChartInstance.destroy();
-
-      const roomLabels = (stats.roomStats || []).slice(0, 5).map(r => r.room_name.split('(')[0]);
-      const roomCounts = (stats.roomStats || []).slice(0, 5).map(r => r.count);
-
-      roomChartInstance = new Chart(ctxRoom, {
-        type: 'bar',
-        data: {
-          labels: roomLabels,
-          datasets: [{
-            label: 'Jumlah Kendala',
-            data: roomCounts,
-            backgroundColor: '#0284c7',
-            borderRadius: 6
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
-          plugins: { legend: { display: false } }
-        }
-      });
+      if (roomChartInstance) {
+        roomChartInstance.data.labels = roomLabels.length > 0 ? roomLabels : ['Belum Ada Data'];
+        roomChartInstance.data.datasets[0].data = roomCounts.length > 0 ? roomCounts : [0];
+        roomChartInstance.update('none');
+      } else {
+        roomChartInstance = new Chart(ctxRoom, {
+          type: 'bar',
+          data: {
+            labels: roomLabels.length > 0 ? roomLabels : ['Belum Ada Data'],
+            datasets: [{
+              label: 'Jumlah Kendala',
+              data: roomCounts.length > 0 ? roomCounts : [0],
+              backgroundColor: '#0284c7',
+              borderRadius: 6
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: { beginAtZero: true, ticks: { precision: 0 } }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
     }
-
   } catch (err) {
     console.error('Failed to load reports charts:', err);
   }
+}
+
+// Generate Official Printable Report HTML Client-Side (Instant in 0ms, 100% reliable in APK)
+function generateClientPrintHtml(startDate, endDate) {
+  let tickets = (allTickets || []).slice();
+  if (startDate) {
+    const sTime = new Date(startDate + 'T00:00:00').getTime();
+    tickets = tickets.filter(t => new Date(t.created_at).getTime() >= sTime);
+  }
+  if (endDate) {
+    const eTime = new Date(endDate + 'T23:59:59').getTime();
+    tickets = tickets.filter(t => new Date(t.created_at).getTime() <= eTime);
+  }
+
+  const totalCount = tickets.length;
+  const resolvedCount = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
+  const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
+  const openCount = tickets.filter(t => t.status === 'open' || t.status === 'assigned').length;
+
+  const todayStr = new Date().toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+
+  const rowsHtml = tickets.map((t, idx) => `
+    <tr>
+      <td style="text-align: center;">${idx + 1}</td>
+      <td style="font-weight: bold; white-space: nowrap;">${t.ticket_no}</td>
+      <td style="white-space: nowrap; text-align: center; font-size: 8pt;">${new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+      <td><strong>${t.room_name}</strong></td>
+      <td>${t.category_name}</td>
+      <td>${t.reporter_name}</td>
+      <td style="text-align: center;">
+        <span class="badge ${t.priority || 'medium'}">${(t.priority || 'medium').toUpperCase()}</span>
+      </td>
+      <td><strong>${t.title}</strong><br><small style="color:#64748b;">${(t.description || '').substring(0, 80)}...</small></td>
+      <td>${t.assigned_to_name || '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
+      <td style="text-align: center;">
+        <span class="status-badge ${t.status}">${t.status.toUpperCase()}</span>
+      </td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Laporan Rekapitulasi E-Tiket IT RSUD Labuha</title>
+  <style>
+    @page { size: A4 landscape; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 11pt; color: #111; margin: 0; padding: 12px; background: #fff; }
+    
+    .print-header-bar {
+      position: sticky;
+      top: 0;
+      z-index: 999;
+      background: #0f172a;
+      color: #fff;
+      padding: 10px 16px;
+      margin: -12px -12px 18px -12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .btn-back {
+      background: rgba(255,255,255,0.15);
+      color: #fff;
+      text-decoration: none;
+      padding: 8px 14px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255,255,255,0.25);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-back:hover { background: rgba(255,255,255,0.25); }
+    .btn-print {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      transition: 0.2s;
+    }
+    .btn-print:hover { background: #0369a1; }
+
+    .kop-surat { border-bottom: 3px double #000; padding-bottom: 12px; margin-bottom: 16px; text-align: center; }
+    .kop-surat h2 { margin: 0; font-size: 13pt; letter-spacing: 0.5px; font-weight: bold; text-transform: uppercase; }
+    .kop-surat h1 { margin: 2px 0; font-size: 15pt; letter-spacing: 1px; font-weight: bold; text-transform: uppercase; }
+    .kop-surat p { margin: 2px 0 0; font-size: 9.5pt; font-style: italic; }
+    .report-title { text-align: center; margin: 14px 0; }
+    .report-title h3 { margin: 0; font-size: 12pt; text-decoration: underline; text-transform: uppercase; }
+    .report-title p { margin: 4px 0 0; font-size: 9.5pt; }
+    
+    .kpi-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .kpi-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px 8px; text-align: center; background: #f8fafc; }
+    .kpi-num { font-size: 16pt; font-weight: 900; color: #0284c7; }
+    .kpi-label { font-size: 8.5pt; color: #475569; text-transform: uppercase; font-weight: 700; margin-top: 2px; }
+
+    .table-responsive-wrapper {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    table { width: 100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 8.5pt; min-width: 850px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; }
+    th { background-color: #f1f5f9; font-weight: bold; text-align: center; color: #334155; }
+    
+    .badge { padding: 2px 6px; border-radius: 4px; font-size: 7pt; font-weight: bold; color: #fff; display: inline-block; }
+    .badge.critical { background: #dc2626; }
+    .badge.high { background: #ea580c; }
+    .badge.medium { background: #d97706; }
+    .badge.low { background: #2563eb; }
+
+    .status-badge { padding: 2px 6px; border-radius: 4px; font-size: 7pt; font-weight: bold; display: inline-block; white-space: nowrap; }
+    .status-badge.open { background: #fee2e2; color: #991b1b; }
+    .status-badge.assigned { background: #fef3c7; color: #92400e; }
+    .status-badge.in_progress { background: #dbeafe; color: #1e40af; }
+    .status-badge.resolved { background: #dcfce7; color: #166534; }
+    .status-badge.closed { background: #f1f5f9; color: #334155; }
+
+    .signature-box { margin-top: 30px; width: 100%; display: flex; justify-content: space-between; font-family: 'Times New Roman', serif; }
+    .sig-column { width: 35%; text-align: center; }
+    .sig-space { height: 60px; }
+
+    @media screen and (max-width: 640px) {
+      .kpi-container { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
+      .kpi-num { font-size: 14pt !important; }
+      .kpi-label { font-size: 7.5pt !important; }
+      .kop-surat h2 { font-size: 10pt !important; }
+      .kop-surat h1 { font-size: 12pt !important; }
+      .kop-surat p { font-size: 8pt !important; }
+      .signature-box { flex-direction: column !important; gap: 20px !important; align-items: center !important; }
+      .sig-column { width: 100% !important; }
+    }
+
+    @media print {
+      .no-print { display: none !important; }
+      .print-header-bar { display: none !important; }
+      body { padding: 0 !important; background: transparent !important; }
+      .table-responsive-wrapper { overflow: visible !important; border: none !important; }
+      table { min-width: 100% !important; }
+      th, td { border: 1px solid #000 !important; }
+      @page { size: A4 landscape; margin: 10mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-header-bar no-print">
+    <button type="button" onclick="goBackToApp()" class="btn-back">
+      <span>⬅ Kembali ke Aplikasi</span>
+    </button>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <button type="button" onclick="window.print()" class="btn-print">
+        <span>🖨 Cetak Sekarang (PDF)</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    function goBackToApp() {
+      if (window.parent && window.parent !== window && typeof window.parent.closeReportPrintModal === 'function') {
+        window.parent.closeReportPrintModal();
+      } else if (window.history.length > 1) {
+        window.history.back();
+      } else {
+        window.location.href = '/';
+      }
+    }
+  </script>
+
+  <div class="kop-surat">
+    <h2>PEMERINTAH KABUPATEN HALMAHERA SELATAN</h2>
+    <h1>RUMAH SAKIT UMUM DAERAH LABUHA</h1>
+    <p>Jl. Trans Halmahera, Labuha, Kab. Halmahera Selatan, Maluku Utara | Telp: (0927) 21118</p>
+  </div>
+
+  <div class="report-title">
+    <h3>LAPORAN REKAPITULASI PELAYANAN HELPDESK IT &amp; SIMRS</h3>
+    <p>Periode: ${startDate || 'Semua Data'} s/d ${endDate || todayStr}</p>
+  </div>
+
+  <div class="kpi-container">
+    <div class="kpi-card">
+      <div class="kpi-num">${totalCount}</div>
+      <div class="kpi-label">Total Tiket Masuk</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color: #166534;">${resolvedCount}</div>
+      <div class="kpi-label">Tiket Selesai</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color: #2563eb;">${inProgressCount}</div>
+      <div class="kpi-label">Sedang Dikerjakan</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-num" style="color: #dc2626;">${openCount}</div>
+      <div class="kpi-label">Menunggu Tindakan</div>
+    </div>
+  </div>
+
+  <div class="table-responsive-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 35px; text-align: center;">No</th>
+          <th style="width: 110px; text-align: center; white-space: nowrap;">No Tiket</th>
+          <th style="width: 90px; text-align: center; white-space: nowrap;">Tanggal</th>
+          <th style="min-width: 120px;">Ruangan / Unit</th>
+          <th style="min-width: 100px;">Kategori</th>
+          <th style="min-width: 100px;">Pelapor</th>
+          <th style="width: 75px; text-align: center;">Prioritas</th>
+          <th style="min-width: 160px;">Uraian Kendala</th>
+          <th style="min-width: 110px;">Teknisi</th>
+          <th style="width: 85px; text-align: center;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml || '<tr><td colspan="10" style="text-align: center; padding: 20px;">Tidak ada data tiket untuk filter ini.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="signature-box">
+    <div class="sig-column">
+      <p>Mengetahui,<br><strong>Direktur RSUD Labuha</strong></p>
+      <div class="sig-space"></div>
+      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">dr. Surahman, Sp.PD</p>
+      <p style="margin: 0; font-size: 10pt;">NIP. 19780512 200604 1 008</p>
+    </div>
+
+    <div class="sig-column">
+      <p>Labuha, ${todayStr}<br><strong>Kepala Instalasi SIMRS &amp; IT</strong></p>
+      <div class="sig-space"></div>
+      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">Fahmi Mansur, S.Kom</p>
+      <p style="margin: 0; font-size: 10pt;">NIP. 19850914 201001 1 012</p>
+    </div>
+  </div>
+</body>
+</html>`;
 }
 
 // Export Excel with date filter & resolved full URL
@@ -2153,15 +2441,10 @@ function exportExcel() {
   window.location.href = fullUrl;
 }
 
-// Print Official HTML / PDF with date filter (In-App Responsive Modal & Direct fallback)
-async function printOfficialReport() {
+// Print Official HTML / PDF (Instantly opens in 0ms with local generator)
+function printOfficialReport() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
-  let url = '/api/reports/print-html';
-  const params = [];
-  if (start) params.push(`startDate=${encodeURIComponent(start)}`);
-  if (end) params.push(`endDate=${encodeURIComponent(end)}`);
-  if (params.length > 0) url += `?${params.join('&')}`;
 
   const modal = document.getElementById('reportPrintModal');
   const frame = document.getElementById('reportPrintFrame');
@@ -2169,21 +2452,16 @@ async function printOfficialReport() {
 
   if (modal && frame) {
     modal.classList.remove('hidden');
-    if (loading) loading.classList.remove('hidden');
-
-    try {
-      const res = await smartFetch(url);
-      if (!res || !res.ok) throw new Error('Gagal memuat dokumen cetak dari server');
-      const html = await res.text();
-      frame.srcdoc = html;
-      frame.onload = () => {
-        if (loading) loading.classList.add('hidden');
-      };
-    } catch (err) {
-      if (loading) loading.classList.add('hidden');
-      Swal.fire('Gagal Memuat Laporan', err.message, 'error');
-    }
+    // Generate instant preview in 0 milliseconds!
+    const html = generateClientPrintHtml(start, end);
+    frame.srcdoc = html;
+    if (loading) loading.classList.add('hidden');
   } else {
+    let url = '/api/reports/print-html';
+    const params = [];
+    if (start) params.push(`startDate=${encodeURIComponent(start)}`);
+    if (end) params.push(`endDate=${encodeURIComponent(end)}`);
+    if (params.length > 0) url += `?${params.join('&')}`;
     const customBase = localStorage.getItem('server_api_url');
     let fullUrl = url;
     if (customBase && url.startsWith('/api/')) {
@@ -2531,4 +2809,14 @@ async function loadNotificationLogs() {
     console.error('Failed to load logs:', err);
   }
 }
+
+// Bersihkan badge & drawer Netlify secara otomatis di web & APK
+(() => {
+  const purgeNetlify = () => {
+    document.querySelectorAll('[id*="netlify"], [class*="netlify"], iframe[src*="netlify"], netlify-drawer').forEach(el => el.remove());
+  };
+  purgeNetlify();
+  setInterval(purgeNetlify, 1500);
+})();
+
 

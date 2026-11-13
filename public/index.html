@@ -503,19 +503,28 @@
             <span id="activePeriodLabel" class="inline-block px-2.5 py-1 bg-sky-50 border border-sky-200 text-sky-700 font-bold text-[10px] rounded-full whitespace-nowrap">Semua Data</span>
           </div>
 
-          <!-- Input Tanggal Dari & Sampai dalam Grid Rapi -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-              <label for="reportStartDate" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Dari Tanggal:
-              </label>
-              <input type="date" id="reportStartDate" onchange="onReportDateChange()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+          <!-- Baris Input Tanggal Kalender (Sangat Rapi & Simetris) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="bg-slate-50/80 p-3 rounded-2xl border border-slate-200">
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="reportStartDate" class="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full bg-sky-500"></span>
+                  <span>Dari Tanggal</span>
+                </label>
+                <span class="text-[10px] text-slate-400 font-semibold">Mulai</span>
+              </div>
+              <input type="date" id="reportStartDate" onchange="onReportDateChange()" class="w-full">
             </div>
-            <div class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
-              <label for="reportEndDate" class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                Sampai Tanggal:
-              </label>
-              <input type="date" id="reportEndDate" onchange="onReportDateChange()" class="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none">
+
+            <div class="bg-slate-50/80 p-3 rounded-2xl border border-slate-200">
+              <div class="flex items-center justify-between mb-1.5">
+                <label for="reportEndDate" class="text-xs font-bold text-slate-700 flex items-center space-x-1.5">
+                  <span class="w-2 h-2 rounded-full bg-teal-500"></span>
+                  <span>Sampai Tanggal</span>
+                </label>
+                <span class="text-[10px] text-slate-400 font-semibold">Akhir</span>
+              </div>
+              <input type="date" id="reportEndDate" onchange="onReportDateChange()" class="w-full">
             </div>
           </div>
 
@@ -539,18 +548,18 @@
           </div>
         </div>
 
-        <!-- Charts Grid -->
+        <!-- Charts Grid (Fixed Relative Height Containers) -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-4">Distribusi Kendala Berdasarkan Kategori</h3>
-            <div class="h-64 flex items-center justify-center">
+            <div class="relative w-full h-64">
               <canvas id="categoryChart"></canvas>
             </div>
           </div>
 
           <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-4">Top 5 Ruangan Paling Sering Melapor</h3>
-            <div class="h-64 flex items-center justify-center">
+            <div class="relative w-full h-64">
               <canvas id="roomChart"></canvas>
             </div>
           </div>
@@ -613,8 +622,12 @@
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          <div class="sm:hidden px-3.5 py-2 bg-sky-50 text-sky-800 text-[11px] font-semibold flex items-center justify-between border-b border-sky-100">
+            <span>👉 Geser tabel ke samping untuk melihat kontak &amp; aksi</span>
+            <span class="text-xs">↔</span>
+          </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs whitespace-nowrap">
+            <table class="w-full text-left text-xs whitespace-nowrap min-w-[620px]">
               <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
                 <tr class="whitespace-nowrap">
                   <th class="p-3.5 whitespace-nowrap">Nama Lengkap</th>
@@ -666,17 +679,19 @@
 
           <!-- Mobile Home Screen Notification Status & Test Card -->
           <div class="p-4 sm:p-5 bg-amber-50/70 rounded-2xl border border-amber-200/90 space-y-3">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <div class="flex items-start space-x-2.5 min-w-0">
-                <span class="text-2xl shrink-0">🔔</span>
-                <div class="min-w-0">
-                  <h3 class="font-bold text-amber-950 text-sm leading-snug">Notifikasi Beranda HP &amp; Layar Kunci (APK Android)</h3>
-                  <p class="text-[11px] text-amber-800 mt-0.5 leading-relaxed">Memastikan tiket baru tetap muncul di beranda HP meskipun aplikasi tidak dibuka / layar terkunci.</p>
+            <div class="space-y-1.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xl shrink-0">🔔</span>
+                  <h3 class="font-bold text-amber-950 text-sm leading-snug">Notifikasi Beranda HP &amp; Layar Kunci</h3>
+                </div>
+                <div class="shrink-0">
+                  <span id="mobileNotifStatusBadge" class="inline-block px-2.5 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-full whitespace-nowrap">Memeriksa...</span>
                 </div>
               </div>
-              <div class="self-start sm:self-center shrink-0">
-                <span id="mobileNotifStatusBadge" class="inline-block px-3 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-full">Memeriksa...</span>
-              </div>
+              <p class="text-[11px] text-amber-800 leading-relaxed">
+                Memastikan tiket baru tetap muncul di beranda HP dan panel notifikasi meskipun aplikasi sedang tidak dibuka atau layar dalam kondisi terkunci.
+              </p>
             </div>
 
             <div class="flex flex-wrap gap-2 text-xs pt-1">
@@ -733,7 +748,7 @@
 
             <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input type="tel" id="testWaPhone" placeholder="Nomor WA Uji Coba (08xxxx)" class="text-xs p-2.5 border rounded-xl flex-1">
-              <button type="button" onclick="testWhatsApp()" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
+              <button type="button" onclick="testWhatsApp()" class="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
                 <span>Kirim Tes WhatsApp</span>
               </button>
             </div>
@@ -808,7 +823,7 @@
 
             <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input type="email" id="testEmailTarget" placeholder="Email tujuan pengujian..." class="text-xs p-2.5 border rounded-xl flex-1">
-              <button type="button" onclick="testEmail()" class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
+              <button type="button" onclick="testEmail()" class="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center justify-center space-x-1 whitespace-nowrap">
                 <span>Kirim Tes Email</span>
               </button>
             </div>
