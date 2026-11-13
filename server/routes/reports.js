@@ -19,11 +19,11 @@ router.get('/stats', async (req, res) => {
     }
 
     const totalRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE 1=1 ${dateFilter}`, params);
-    const openRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = "open" ${dateFilter}`, params);
-    const assignedRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = "assigned" ${dateFilter}`, params);
-    const inProgressRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = "in_progress" ${dateFilter}`, params);
-    const pendingRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = "pending" ${dateFilter}`, params);
-    const resolvedRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status IN ("resolved", "closed") ${dateFilter}`, params);
+    const openRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = 'open' ${dateFilter}`, params);
+    const assignedRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = 'assigned' ${dateFilter}`, params);
+    const inProgressRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = 'in_progress' ${dateFilter}`, params);
+    const pendingRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status = 'pending' ${dateFilter}`, params);
+    const resolvedRow = await query.get(`SELECT COUNT(*) as count FROM tickets WHERE status IN ('resolved', 'closed') ${dateFilter}`, params);
     const avgRatingRow = await query.get(`SELECT AVG(satisfaction_rating) as avg_rating FROM tickets WHERE satisfaction_rating IS NOT NULL ${dateFilter}`, params);
 
     // Priority distribution
