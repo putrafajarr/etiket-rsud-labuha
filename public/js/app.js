@@ -24,15 +24,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadTechnicians();
   await loadTickets();
   await loadStats();
+  startAutoSync();
   lucide.createIcons();
 
   // Unlock AudioContext and request notification permission on first user click
   document.addEventListener('click', () => {
     if (window.soundAlert) window.soundAlert.init();
     if (window.Capacitor?.Plugins?.EtiketNative) {
-      window.Capacitor.Plugins.EtiketNative.requestPermission().then(refreshMobileNotifBadge).catch(() => {});
+      window.Capacitor.Plugins.EtiketNative.requestPermission().then(refreshMobileNotifBadge).catch(() => { });
     } else if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then(refreshMobileNotifBadge).catch(() => {});
+      Notification.requestPermission().then(refreshMobileNotifBadge).catch(() => { });
     }
   }, { once: true });
 });
@@ -86,7 +87,7 @@ async function refreshMobileNotifBadge() {
       }
       return;
     }
-  } catch (e) {}
+  } catch (e) { }
 
   if (!window.isSecureContext) {
     badge.textContent = 'ℹ Browser HTTP (Gunakan APK)';
@@ -237,55 +238,135 @@ function logoutUser() {
 
 // Socket.io Realtime Listener
 function initSocket() {
-  socket = io();
+  try {
+    if (typeof io === 'function') {
+      socket = io();
 
-  socket.on('connect', () => {
-    console.log('[Socket] Connected to RSUD Labuha server');
-  });
+      socket.on('connect', () => {
+        console.log('[Socket] Connected to RSUD Labuha server');
+      });
 
-  // Event: New ticket created from anywhere (Web, QR, Android, Bot WA/TG)
-  socket.on('ticket_created', (data) => {
-    const t = data.ticket;
-    
-    // Play sound alarm
-    if (window.soundAlert) {
-      if (t.priority === 'critical' || t.priority === 'high') {
-        window.soundAlert.playEmergency();
-      } else {
-        window.soundAlert.playChime();
+      // Event: New ticket created from anywhere (Web, QR, Android, Bot WA/TG)
+      socket.on('ticket_created', (data) => {
+        const t = data.ticket;
+        if (window.soundAlert) {
+          if (t.priority === 'critical' || t.priority === 'high') {
+            window.soundAlert.playEmergency();
+          } else {
+            window.soundAlert.playChime();
+          }
+        }
+        notifyNativeOrBrowser(t);
+        Swal.fire({
+          toast: true,
+          position: 'top-end',
+          icon: t.priority === 'critical' ? 'error' : 'info',
+          title: `${t.priority === 'critical' ? '🚨 KRITIS: ' : '🎫 Tiket Baru: '}${t.room_name}`,
+          text: t.title,
+          showConfirmButton: false,
+          timer: 6000,
+          timerProgressBar: true
+        });
+        loadTickets();
+        loadStats();
+        if (currentTab === 'technician') loadTechnicianTickets();
+      });
+
+      // Event: Ticket status updated or assigned
+      socket.on('ticket_updated', (data) => {
+        if (data.action === 'resolved') {
+          if (window.soundAlert) window.soundAlert.playSuccess();
+        }
+        loadTickets();
+        loadStats();
+        if (currentTab === 'technician') loadTechnicianTickets();
+      });
+    } else {
+      console.log('[Socket] io() is not available, relying on auto-sync background polling');
+    }
+  } catch (err) {
+    console.warn('[Socket] Socket init fallback to polling:', err);
+  }
+}
+
+// Auto-Sync Background Polling (Critical for Netlify Serverless & Real-Time Sync)
+let autoSyncTimer = null;
+let lastSyncSignature = '';
+let knownTicketIds = new Set();
+let isInitialSyncRan = false;
+
+function startAutoSync() {
+  if (autoSyncTimer) clearInterval(autoSyncTimer);
+
+  autoSyncTimer = setInterval(async () => {
+    try {
+      // 1. Polling tickets diff
+      const res = await fetch('/api/tickets');
+      if (!res.ok) return;
+      const freshTickets = await res.json();
+      if (!Array.isArray(freshTickets)) return;
+
+      const currentSig = freshTickets.map(t => `${t.id}:${t.status}:${t.assigned_to}:${t.priority}`).join('|');
+
+      if (!isInitialSyncRan) {
+        lastSyncSignature = currentSig;
+        knownTicketIds = new Set(freshTickets.map(t => t.id));
+        isInitialSyncRan = true;
+        return;
       }
+
+      if (currentSig !== lastSyncSignature) {
+        const newTickets = freshTickets.filter(t => !knownTicketIds.has(t.id));
+        if (newTickets.length > 0) {
+          const newest = newTickets[0];
+          if (window.soundAlert) {
+            if (newest.priority === 'critical' || newest.priority === 'high') {
+              window.soundAlert.playEmergency();
+            } else {
+              window.soundAlert.playChime();
+            }
+          }
+          notifyNativeOrBrowser(newest);
+          Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: newest.priority === 'critical' ? 'error' : 'info',
+            title: `${newest.priority === 'critical' ? '🚨 KRITIS: ' : '🎫 Tiket Baru: '}${newest.room_name}`,
+            text: newest.title,
+            showConfirmButton: false,
+            timer: 5000,
+            timerProgressBar: true
+          });
+        }
+
+        allTickets = freshTickets;
+        lastSyncSignature = currentSig;
+        knownTicketIds = new Set(freshTickets.map(t => t.id));
+
+        renderTickets();
+        loadStats();
+        if (currentTab === 'technician') loadTechnicianTickets();
+      }
+
+      // 2. If viewing rooms, ensure rooms are always fresh
+      if (currentTab === 'rooms') {
+        const roomsRes = await fetch('/api/rooms');
+        if (roomsRes.ok) {
+          const freshRooms = await roomsRes.json();
+          if (Array.isArray(freshRooms)) {
+            const freshRoomsSig = freshRooms.map(r => `${r.id}:${r.name}:${r.code}:${r.is_active}`).join('|');
+            const oldRoomsSig = (allRooms || []).map(r => `${r.id}:${r.name}:${r.code}:${r.is_active}`).join('|');
+            if (freshRoomsSig !== oldRoomsSig) {
+              allRooms = freshRooms;
+              loadRoomsMaster();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Background silent retry
     }
-
-    // Trigger native Android APK status bar / lock screen notification or browser notification
-    notifyNativeOrBrowser(t);
-
-    // Show toast notification
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: t.priority === 'critical' ? 'error' : 'info',
-      title: `${t.priority === 'critical' ? '🚨 KRITIS: ' : '🎫 Tiket Baru: '}${t.room_name}`,
-      text: t.title,
-      showConfirmButton: false,
-      timer: 6000,
-      timerProgressBar: true
-    });
-
-    // Refresh tickets
-    loadTickets();
-    loadStats();
-    if (currentTab === 'technician') loadTechnicianTickets();
-  });
-
-  // Event: Ticket status updated or assigned
-  socket.on('ticket_updated', (data) => {
-    if (data.action === 'resolved') {
-      window.soundAlert.playSuccess();
-    }
-    loadTickets();
-    loadStats();
-    if (currentTab === 'technician') loadTechnicianTickets();
-  });
+  }, 3000);
 }
 
 // Toggle audio alert sound
@@ -337,7 +418,7 @@ function closeMobileMenu() {
 }
 
 // Global App Back Button Handler (Physical Back Key & UI Button)
-window.handleAppBack = function() {
+window.handleAppBack = function () {
   // 1. If mobile drawer is open, close it
   const drawer = document.getElementById('mobileDrawer');
   if (drawer && drawer.classList.contains('open')) {
@@ -407,7 +488,12 @@ function switchTab(tab) {
   const mobMenu = document.getElementById('mob-menu');
   if (mobMenu) mobMenu.classList.remove('active');
 
-  if (tab === 'reports') {
+  if (tab === 'tickets') {
+    loadTickets();
+    loadStats();
+  } else if (tab === 'rooms') {
+    loadRoomsMaster();
+  } else if (tab === 'reports') {
     loadReportsData();
   } else if (tab === 'gateway') {
     loadGatewaySettings();
@@ -517,9 +603,9 @@ function renderTickets() {
           <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-slate-400"></i> ${t.room_name}
         </p>
       </div>
-      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
-        <span>👤 ${t.reporter_name}</span>
-        <span>${t.assigned_to_name ? `👨‍🔧 ${t.assigned_to_name.split(' ')[0]}` : '<em class="text-rose-500 font-bold">Belum ada teknisi</em>'}</span>
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
+        <span class="truncate max-w-[100px]">👤 ${t.reporter_name}</span>
+        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">⭐ Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + (t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
       </div>
     `;
 
@@ -550,7 +636,7 @@ function renderTickets() {
       <td class="p-3.5">${priorityBadge}</td>
       <td class="p-3.5 text-slate-700">${t.reporter_name}</td>
       <td class="p-3.5 font-medium text-slate-800 max-w-xs truncate">${t.title}</td>
-      <td class="p-3.5 font-semibold text-slate-700">${t.assigned_to_name || '<span class="text-rose-500 font-bold">Belum Ditugaskan</span>'}</td>
+      <td class="p-3.5 font-semibold">${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">⭐ ' + t.assigned_to_name + ' (Anda)</span>' : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + t.assigned_to_name + '</span>') : '<span class="text-rose-500 font-bold text-xs bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">⏳ Belum Ditugaskan</span>'}</td>
       <td class="p-3.5 uppercase font-bold text-[10px] text-slate-600">${t.status.replace('_', ' ')}</td>
       <td class="p-3.5 text-center">
         <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-2.5 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-bold">Aksi</button>
@@ -573,7 +659,7 @@ async function loadRoomsMaster() {
   try {
     const res = await fetch('/api/rooms');
     allRooms = await res.json();
-    
+
     // Filter dropdown
     const filterSelect = document.getElementById('filterRoom');
     filterSelect.innerHTML = '<option value="">Semua Ruangan RSUD</option>';
@@ -642,11 +728,79 @@ async function loadRoomsMaster() {
   }
 }
 
+// Auto-generate standardized room/unit code based on room name & sequence
+function generateAutoRoomCode(name) {
+  if (!name || !name.trim()) return '';
+  const clean = name.trim().toUpperCase();
+
+  let prefix = 'UNIT';
+  if (clean.includes('POLI') || clean.includes('KLINIK')) {
+    prefix = 'POLI';
+  } else if (clean.includes('IGD') || clean.includes('UGD') || clean.includes('DARURAT')) {
+    prefix = 'UGD';
+  } else if (clean.includes('INAP') || clean.includes('BANGSAL') || clean.includes('RUANG RAWAT')) {
+    prefix = 'INAP';
+  } else if (clean.includes('ICU') || clean.includes('ICCU') || clean.includes('NICU') || clean.includes('PICU')) {
+    prefix = 'ICU';
+  } else if (clean.includes('LAB') || clean.includes('PATOLOGI')) {
+    prefix = 'LAB';
+  } else if (clean.includes('FARMASI') || clean.includes('APOTEK') || clean.includes('OBAT')) {
+    prefix = 'FAR';
+  } else if (clean.includes('RAD') || clean.includes('RONTGEN')) {
+    prefix = 'RAD';
+  } else if (clean.includes('BEDAH') || clean.includes('OPERASI') || clean.includes(' OK ') || clean.endsWith(' OK') || clean.startsWith('OK ')) {
+    prefix = 'OK';
+  } else if (clean.includes('GIZI') || clean.includes('DAPUR')) {
+    prefix = 'GIZI';
+  } else if (clean.includes('REKAM MEDIS') || clean.includes(' RM ') || clean.startsWith('RM ')) {
+    prefix = 'RM';
+  } else if (clean.includes('ADMIN') || clean.includes(' TU ') || clean.includes('MANAJEMEN') || clean.includes('DIREKSI')) {
+    prefix = 'ADM';
+  } else if (clean.includes('IT') || clean.includes('SIMRS') || clean.includes('SERVER')) {
+    prefix = 'IT';
+  } else {
+    const words = clean.split(/\s+/).filter(w => w.length > 0);
+    if (words.length >= 2) {
+      prefix = (words[0].substring(0, 2) + words[1].substring(0, 2)).toUpperCase();
+    } else {
+      prefix = clean.replace(/[^A-Z0-9]/g, '').substring(0, 4) || 'UNIT';
+    }
+  }
+
+  let maxNum = 0;
+  (allRooms || []).forEach(r => {
+    if (r.code && r.code.toUpperCase().startsWith(prefix + '-')) {
+      const parts = r.code.toUpperCase().split('-');
+      const num = parseInt(parts[1], 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    }
+  });
+
+  const nextNum = String(maxNum + 1).padStart(2, '0');
+  return prefix + '-' + nextNum;
+}
+
+function onRoomNameInput(val) {
+  const editId = document.getElementById('editRoomId')?.value;
+  if (!editId) {
+    const codeEl = document.getElementById('newRoomCode');
+    if (codeEl) {
+      codeEl.value = generateAutoRoomCode(val);
+      codeEl.readOnly = true;
+    }
+  }
+}
+
 // Modal Tambah / Edit Ruangan / Unit
 function openAddRoomModal() {
   document.getElementById('editRoomId').value = '';
   document.getElementById('roomModalTitle').textContent = 'Tambah Ruangan / Unit RSUD';
   document.getElementById('addRoomForm').reset();
+  const codeEl = document.getElementById('newRoomCode');
+  if (codeEl) {
+    codeEl.value = '';
+    codeEl.readOnly = true;
+  }
   document.getElementById('addRoomModal').classList.remove('hidden');
   document.getElementById('newRoomName').focus();
   lucide.createIcons();
@@ -659,7 +813,11 @@ function openEditRoomModal(roomId) {
   document.getElementById('editRoomId').value = room.id;
   document.getElementById('roomModalTitle').textContent = 'Edit Ruangan / Unit RSUD';
   document.getElementById('newRoomName').value = room.name;
-  document.getElementById('newRoomCode').value = room.code;
+  const codeEl = document.getElementById('newRoomCode');
+  if (codeEl) {
+    codeEl.value = room.code;
+    codeEl.readOnly = true;
+  }
   document.getElementById('newRoomBuilding').value = room.building || 'Gedung Rawat Jalan';
   document.getElementById('newRoomFloor').value = room.floor || '';
   document.getElementById('newRoomPic').value = room.pic_name || '';
@@ -1029,6 +1187,34 @@ async function openTicketModal(ticketId) {
     const data = await res.json();
     selectedTicketForModal = data.ticket;
 
+    // Anti-overlap banner inside modal
+    const lockBanner = document.getElementById('modalLockBanner');
+    const lockText = document.getElementById('modalLockText');
+    if (lockBanner && lockText) {
+      if (selectedTicketForModal.assigned_to) {
+        lockBanner.classList.remove('hidden');
+        if (activeUser && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name)) {
+          lockBanner.className = 'p-3.5 bg-emerald-50 border-2 border-emerald-300 rounded-2xl flex items-center space-x-3 text-emerald-950 shadow-sm';
+          const iconBox = lockBanner.querySelector('div');
+          if (iconBox) {
+            iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
+            iconBox.textContent = '⭐';
+          }
+          lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani.`;
+        } else {
+          lockBanner.className = 'p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl flex items-center space-x-3 text-amber-950 shadow-sm';
+          const iconBox = lockBanner.querySelector('div');
+          if (iconBox) {
+            iconBox.className = 'w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
+            iconBox.textContent = '🔒';
+          }
+          lockText.innerHTML = `Tiket ini sedang dikerjakan oleh <b>${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}</b>.`;
+        }
+      } else {
+        lockBanner.classList.add('hidden');
+      }
+    }
+
     document.getElementById('modalTicketNo').textContent = selectedTicketForModal.ticket_no;
     document.getElementById('modalRoom').textContent = selectedTicketForModal.room_name;
     document.getElementById('modalCategory').textContent = selectedTicketForModal.category_name;
@@ -1036,7 +1222,7 @@ async function openTicketModal(ticketId) {
     document.getElementById('modalPhone').textContent = selectedTicketForModal.reporter_phone;
     document.getElementById('modalTitle').textContent = selectedTicketForModal.title;
     document.getElementById('modalDesc').textContent = selectedTicketForModal.description;
-    
+
     document.getElementById('modalAssignTech').value = selectedTicketForModal.assigned_to || '';
     document.getElementById('modalNewStatus').value = selectedTicketForModal.status || 'in_progress';
     document.getElementById('modalResolutionNotes').value = selectedTicketForModal.resolution_notes || '';
@@ -1076,6 +1262,20 @@ async function assignTechnician() {
   if (!techId) {
     Swal.fire('Peringatan', 'Silakan pilih teknisi terlebih dahulu', 'warning');
     return;
+  }
+
+  // Anti-overlap protection check
+  if (selectedTicketForModal.assigned_to && selectedTicketForModal.assigned_to != techId) {
+    const confirmOverlap = await Swal.fire({
+      title: 'Peringatan Tumpang Tindih',
+      html: `Tiket ini saat ini sedang ditangani oleh <b>${selectedTicketForModal.assigned_to_name || 'Teknisi Lain'}</b>.<br><br>Apakah Anda yakin ingin mengambil alih atau mengalihkan tiket ini ke petugas lain?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Ya, Alihkan',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#d97706'
+    });
+    if (!confirmOverlap.isConfirmed) return;
   }
 
   try {
@@ -1428,7 +1628,7 @@ async function saveGatewaySettings() {
       if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
         targetUrl = `http://${targetUrl}`;
       }
-      window.Capacitor.Plugins.EtiketNative.configure({ serverUrl: targetUrl }).catch(() => {});
+      window.Capacitor.Plugins.EtiketNative.configure({ serverUrl: targetUrl }).catch(() => { });
     }
 
     Swal.fire({
@@ -1490,10 +1690,10 @@ async function notifyNativeOrBrowser(t) {
           data: { url: '/index.html' }
         });
       }).catch(() => {
-        try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) {}
+        try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) { }
       });
     } else {
-      try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) {}
+      try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) { }
     }
   }
 }
