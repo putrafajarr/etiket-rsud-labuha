@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: 'Terjadi kesalahan pada server' });
+    res.status(500).json({ error: 'Terjadi kesalahan pada server: ' + err.message });
   }
 });
 
