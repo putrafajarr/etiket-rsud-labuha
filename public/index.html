@@ -413,20 +413,45 @@
 
         <!-- Table View Container -->
         <div id="tableViewContainer" class="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold tracking-wider">
-                <tr>
-                  <th class="p-3.5">No. Tiket</th>
-                  <th class="p-3.5">Waktu Lapor</th>
-                  <th class="p-3.5">Ruangan</th>
-                  <th class="p-3.5">Kategori</th>
-                  <th class="p-3.5">Prioritas</th>
-                  <th class="p-3.5">Pelapor</th>
-                  <th class="p-3.5">Keluhan</th>
-                  <th class="p-3.5">Teknisi</th>
-                  <th class="p-3.5">Status</th>
-                  <th class="p-3.5 text-center">Aksi</th>
+          <!-- Mobile Sub-Toggle: Card List vs Horizontal Full Table -->
+          <div class="sm:hidden p-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+            <span class="text-[11px] font-bold text-slate-700">Tampilan Data Tiket:</span>
+            <div class="flex items-center space-x-1 bg-white p-0.5 rounded-xl border border-slate-200 shadow-sm">
+              <button type="button" id="btnSubMobileCards" onclick="setTableSubView('cards')" class="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-600 text-white transition">
+                📱 Kartu Rapi
+              </button>
+              <button type="button" id="btnSubMobileTable" onclick="setTableSubView('table')" class="px-2.5 py-1 text-[11px] font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition">
+                📊 Tabel Kolom
+              </button>
+            </div>
+          </div>
+
+          <!-- Mobile Gesture Hint (Shown only when in mobile table view) -->
+          <div id="mobileTableSwipeHint" class="hidden sm:hidden px-3.5 py-1.5 bg-sky-50 text-sky-800 text-[10px] font-semibold flex items-center justify-between border-b border-sky-100">
+            <span>👉 Geser tabel ke kanan untuk melihat rincian &amp; status</span>
+            <span class="text-xs font-bold text-sky-600">↔ Geser</span>
+          </div>
+
+          <!-- 1. Mobile Cards View (Super neat, highly legible on any Android phone) -->
+          <div id="ticketsMobileCardContainer" class="block sm:hidden divide-y divide-slate-100">
+            <!-- Injected dynamically by renderTickets() -->
+          </div>
+
+          <!-- 2. Responsive Table View (Full 10-columns with min-w-[1050px] so it NEVER crushes) -->
+          <div id="ticketsFullTableWrapper" class="hidden sm:block overflow-x-auto">
+            <table class="w-full text-left text-xs whitespace-nowrap min-w-[1050px]">
+              <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-bold text-[10px] tracking-wider sticky top-0">
+                <tr class="whitespace-nowrap">
+                  <th class="p-3.5 whitespace-nowrap">No. Tiket</th>
+                  <th class="p-3.5 whitespace-nowrap">Waktu Lapor</th>
+                  <th class="p-3.5 whitespace-nowrap">Ruangan</th>
+                  <th class="p-3.5 whitespace-nowrap">Kategori</th>
+                  <th class="p-3.5 whitespace-nowrap">Prioritas</th>
+                  <th class="p-3.5 whitespace-nowrap">Pelapor</th>
+                  <th class="p-3.5 whitespace-nowrap">Keluhan</th>
+                  <th class="p-3.5 whitespace-nowrap">Teknisi Bertugas</th>
+                  <th class="p-3.5 whitespace-nowrap">Status</th>
+                  <th class="p-3.5 text-center whitespace-nowrap">Aksi</th>
                 </tr>
               </thead>
               <tbody id="ticketsTableBody" class="divide-y divide-slate-100"></tbody>
@@ -569,13 +594,13 @@
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden p-5">
           <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider mb-4">Peringkat & Kinerja Teknisi IT</h3>
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 text-slate-500 uppercase font-bold">
-                <tr>
-                  <th class="p-3">Nama Teknisi</th>
-                  <th class="p-3">Spesialisasi</th>
-                  <th class="p-3">Tiket Sedang Aktif</th>
-                  <th class="p-3">Tiket Selesai</th>
+            <table class="w-full text-left text-xs whitespace-nowrap min-w-[550px]">
+              <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
+                <tr class="whitespace-nowrap">
+                  <th class="p-3.5 whitespace-nowrap">Nama Teknisi</th>
+                  <th class="p-3.5 whitespace-nowrap">Spesialisasi</th>
+                  <th class="p-3.5 whitespace-nowrap">Tiket Sedang Aktif</th>
+                  <th class="p-3.5 whitespace-nowrap">Tiket Selesai</th>
                 </tr>
               </thead>
               <tbody id="techLeaderboardBody" class="divide-y divide-slate-100"></tbody>
@@ -851,16 +876,20 @@
         </div>
 
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+          <div class="sm:hidden px-3.5 py-2 bg-sky-50 text-sky-800 text-[11px] font-semibold flex items-center justify-between border-b border-sky-100">
+            <span>👉 Geser tabel ke samping untuk melihat log lengkap</span>
+            <span class="text-xs">↔</span>
+          </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b">
-                <tr>
-                  <th class="p-3">Waktu</th>
-                  <th class="p-3">Channel</th>
-                  <th class="p-3">Penerima</th>
-                  <th class="p-3">Judul / Status</th>
-                  <th class="p-3">Cuplikan Pesan</th>
-                  <th class="p-3">Status Pengiriman</th>
+            <table class="w-full text-left text-xs whitespace-nowrap min-w-[720px]">
+              <thead class="bg-slate-50 text-slate-500 uppercase font-bold border-b border-slate-200">
+                <tr class="whitespace-nowrap">
+                  <th class="p-3.5 whitespace-nowrap">Waktu</th>
+                  <th class="p-3.5 whitespace-nowrap">Channel</th>
+                  <th class="p-3.5 whitespace-nowrap">Penerima</th>
+                  <th class="p-3.5 whitespace-nowrap">Judul / Status</th>
+                  <th class="p-3.5 whitespace-nowrap">Cuplikan Pesan</th>
+                  <th class="p-3.5 whitespace-nowrap">Status Pengiriman</th>
                 </tr>
               </thead>
               <tbody id="logsTableBody" class="divide-y divide-slate-100 font-mono"></tbody>

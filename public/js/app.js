@@ -892,7 +892,56 @@ function setViewMode(mode) {
     table.classList.remove('hidden');
     btnT.className = 'px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white transition flex items-center space-x-1';
     btnK.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1';
+    lucide.createIcons();
   }
+}
+
+// Sub-toggle for Mobile Table View: Cards vs Full Table
+let tableSubViewMode = 'cards';
+function setTableSubView(mode) {
+  tableSubViewMode = mode;
+  const cardContainer = document.getElementById('ticketsMobileCardContainer');
+  const tableWrapper = document.getElementById('ticketsFullTableWrapper');
+  const swipeHint = document.getElementById('mobileTableSwipeHint');
+  const btnC = document.getElementById('btnSubMobileCards');
+  const btnT = document.getElementById('btnSubMobileTable');
+
+  if (mode === 'cards') {
+    if (cardContainer) {
+      cardContainer.classList.remove('hidden');
+      cardContainer.classList.add('block');
+    }
+    if (tableWrapper) {
+      tableWrapper.classList.add('hidden');
+      tableWrapper.classList.remove('block');
+      tableWrapper.classList.add('sm:block');
+    }
+    if (swipeHint) swipeHint.classList.add('hidden');
+    if (btnC) {
+      btnC.className = 'px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-600 text-white transition';
+    }
+    if (btnT) {
+      btnT.className = 'px-2.5 py-1 text-[11px] font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition';
+    }
+  } else {
+    if (cardContainer) {
+      cardContainer.classList.add('hidden');
+      cardContainer.classList.remove('block');
+    }
+    if (tableWrapper) {
+      tableWrapper.classList.remove('hidden');
+      tableWrapper.classList.remove('sm:block');
+      tableWrapper.classList.add('block');
+    }
+    if (swipeHint) swipeHint.classList.remove('hidden');
+    if (btnT) {
+      btnT.className = 'px-2.5 py-1 text-[11px] font-bold rounded-lg bg-sky-600 text-white transition';
+    }
+    if (btnC) {
+      btnC.className = 'px-2.5 py-1 text-[11px] font-semibold text-slate-600 rounded-lg hover:bg-slate-100 transition';
+    }
+  }
+  lucide.createIcons();
 }
 
 // Debounce search filter
@@ -929,14 +978,39 @@ function renderTickets() {
   const progressList = document.getElementById('colProgressList');
   const resolvedList = document.getElementById('colResolvedList');
   const tableBody = document.getElementById('ticketsTableBody');
+  const mobileCardContainer = document.getElementById('ticketsMobileCardContainer');
 
-  openList.innerHTML = '';
-  assignedList.innerHTML = '';
-  progressList.innerHTML = '';
-  resolvedList.innerHTML = '';
-  tableBody.innerHTML = '';
+  if (openList) openList.innerHTML = '';
+  if (assignedList) assignedList.innerHTML = '';
+  if (progressList) progressList.innerHTML = '';
+  if (resolvedList) resolvedList.innerHTML = '';
+  if (tableBody) tableBody.innerHTML = '';
+  if (mobileCardContainer) mobileCardContainer.innerHTML = '';
 
   let countOpen = 0, countAssigned = 0, countProgress = 0, countResolved = 0;
+
+  if (allTickets.length === 0) {
+    if (tableBody) {
+      tableBody.innerHTML = `
+        <tr>
+          <td colspan="10" class="p-8 text-center text-slate-400">
+            <div class="text-3xl mb-2">📭</div>
+            <p class="font-bold text-sm text-slate-700">Tidak Ada Data Tiket</p>
+            <p class="text-xs text-slate-400 mt-1">Belum ada tiket yang sesuai dengan filter atau pencarian Anda.</p>
+          </td>
+        </tr>
+      `;
+    }
+    if (mobileCardContainer) {
+      mobileCardContainer.innerHTML = `
+        <div class="p-8 text-center text-slate-400 bg-white">
+          <div class="text-3xl mb-2">📭</div>
+          <p class="font-bold text-sm text-slate-700">Tidak Ada Data Tiket</p>
+          <p class="text-xs text-slate-400 mt-1">Belum ada tiket yang sesuai dengan filter atau pencarian Anda.</p>
+        </div>
+      `;
+    }
+  }
 
   allTickets.forEach(t => {
     // Priority styling
@@ -948,11 +1022,41 @@ function renderTickets() {
     }[t.priority] || 'bg-white border-slate-200';
 
     const priorityBadge = {
-      critical: '<span class="bg-rose-600 text-white px-2 py-0.5 rounded text-[10px] font-black uppercase">🚨 Kritis</span>',
-      high: '<span class="bg-orange-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">Tinggi</span>',
-      medium: '<span class="bg-amber-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">Sedang</span>',
-      low: '<span class="bg-sky-500 text-white px-2 py-0.5 rounded text-[10px] font-bold uppercase">Rendah</span>'
-    }[t.priority];
+      critical: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-rose-600 text-white whitespace-nowrap shadow-sm">🚨 Kritis</span>',
+      high: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-orange-500 text-white whitespace-nowrap shadow-sm">🔴 Tinggi</span>',
+      medium: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 text-white whitespace-nowrap shadow-sm">🟡 Sedang</span>',
+      low: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-sky-500 text-white whitespace-nowrap shadow-sm">🟢 Rendah</span>'
+    }[t.priority] || `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 whitespace-nowrap">${t.priority}</span>`;
+
+    // Status Badge
+    const statusBadge = {
+      open: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>Tiket Baru</span>',
+      assigned: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Ditugaskan</span>',
+      in_progress: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>Dikerjakan</span>',
+      pending: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Pending</span>',
+      resolved: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">✓ Selesai</span>',
+      closed: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">✓ Ditutup</span>'
+    }[t.status] || `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">${t.status}</span>`;
+
+    // Format date and time
+    const createdDate = new Date(t.created_at);
+    const dateFormatted = !isNaN(createdDate)
+      ? createdDate.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : '-';
+    const timeFormatted = !isNaN(createdDate)
+      ? createdDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+
+    // Technician Pill Badge
+    let techBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">⏳ Belum Ditugaskan</span>';
+    if (t.assigned_to) {
+      const isMe = activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name);
+      if (isMe) {
+        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap">👤 ${t.assigned_to_name} (Anda)</span>`;
+      } else {
+        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap">🔒 ${t.assigned_to_name}</span>`;
+      }
+    }
 
     // Card element for Kanban
     const card = document.createElement('div');
@@ -977,45 +1081,114 @@ function renderTickets() {
 
     // Append to Kanban column
     if (t.status === 'open') {
-      openList.appendChild(card);
+      if (openList) openList.appendChild(card);
       countOpen++;
     } else if (t.status === 'assigned') {
-      assignedList.appendChild(card);
+      if (assignedList) assignedList.appendChild(card);
       countAssigned++;
     } else if (t.status === 'in_progress' || t.status === 'pending') {
-      progressList.appendChild(card);
+      if (progressList) progressList.appendChild(card);
       countProgress++;
     } else if (t.status === 'resolved' || t.status === 'closed') {
-      resolvedList.appendChild(card);
+      if (resolvedList) resolvedList.appendChild(card);
       countResolved++;
     }
 
-    // Append to Table
-    const tr = document.createElement('tr');
-    tr.className = 'hover:bg-slate-50 cursor-pointer transition';
-    tr.onclick = () => openTicketModal(t.id);
-    tr.innerHTML = `
-      <td class="p-3.5 font-mono font-bold text-sky-700">${t.ticket_no}</td>
-      <td class="p-3.5 text-slate-500 whitespace-nowrap">${new Date(t.created_at).toLocaleDateString('id-ID')}</td>
-      <td class="p-3.5 font-bold text-slate-800">${t.room_name}</td>
-      <td class="p-3.5 text-slate-600">${t.category_name}</td>
-      <td class="p-3.5">${priorityBadge}</td>
-      <td class="p-3.5 text-slate-700">${t.reporter_name}</td>
-      <td class="p-3.5 font-medium text-slate-800 max-w-xs truncate">${t.title}</td>
-      <td class="p-3.5 font-semibold">${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 ' + t.assigned_to_name + ' (Anda)</span>' : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + t.assigned_to_name + '</span>') : '<span class="text-rose-500 font-bold text-xs bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">⏳ Belum Ditugaskan</span>'}</td>
-      <td class="p-3.5 uppercase font-bold text-[10px] text-slate-600">${t.status.replace('_', ' ')}</td>
-      <td class="p-3.5 text-center">
-        <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-2.5 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-bold">Aksi</button>
-      </td>
-    `;
-    tableBody.appendChild(tr);
+    // Append to Full Table
+    if (tableBody) {
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-sky-50/50 cursor-pointer transition whitespace-nowrap border-b border-slate-100';
+      tr.onclick = () => openTicketModal(t.id);
+      tr.innerHTML = `
+        <td class="p-3.5 font-mono font-bold text-sky-700 whitespace-nowrap text-xs">${t.ticket_no}</td>
+        <td class="p-3.5 text-slate-500 whitespace-nowrap text-xs">
+          <div class="font-bold text-slate-700 leading-tight">${dateFormatted}</div>
+          <div class="text-[10px] text-slate-400 font-mono mt-0.5">${timeFormatted} WIT</div>
+        </td>
+        <td class="p-3.5 font-bold text-slate-800 whitespace-nowrap text-xs">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-sm">🏥</span>
+            <span>${t.room_name}</span>
+          </div>
+        </td>
+        <td class="p-3.5 whitespace-nowrap text-xs">
+          <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">${t.category_name}</span>
+        </td>
+        <td class="p-3.5 whitespace-nowrap text-xs">${priorityBadge}</td>
+        <td class="p-3.5 text-slate-700 whitespace-nowrap text-xs font-semibold">${t.reporter_name}</td>
+        <td class="p-3.5 text-slate-800 text-xs max-w-xs truncate font-medium" title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title}</td>
+        <td class="p-3.5 whitespace-nowrap text-xs">${techBadge}</td>
+        <td class="p-3.5 whitespace-nowrap text-xs">${statusBadge}</td>
+        <td class="p-3.5 text-center whitespace-nowrap text-xs">
+          <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1 mx-auto active:scale-95">
+            <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+            <span>Buka</span>
+          </button>
+        </td>
+      `;
+      tableBody.appendChild(tr);
+    }
+
+    // Append to Mobile Card List
+    if (mobileCardContainer) {
+      const mCard = document.createElement('div');
+      mCard.className = 'p-3.5 sm:p-4 bg-white hover:bg-sky-50/40 transition cursor-pointer space-y-2.5 active:bg-slate-50 border-b border-slate-100';
+      mCard.onclick = () => openTicketModal(t.id);
+      mCard.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center space-x-2 min-w-0">
+            <span class="font-mono font-bold text-sky-700 text-xs">${t.ticket_no}</span>
+            <span class="text-[10px] text-slate-400 font-medium">${dateFormatted} • ${timeFormatted} WIT</span>
+          </div>
+          <div class="shrink-0">
+            ${statusBadge}
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-2">
+          <div class="font-bold text-slate-800 text-sm flex items-center space-x-1.5 min-w-0">
+            <span class="text-base shrink-0">🏥</span>
+            <span class="truncate">${t.room_name}</span>
+          </div>
+          <div class="shrink-0">
+            ${priorityBadge}
+          </div>
+        </div>
+
+        <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs text-slate-700 font-medium leading-relaxed">
+          <span class="text-slate-400 text-[10px] block font-bold uppercase tracking-wider mb-0.5">Uraian Kendala:</span>
+          <p class="line-clamp-2">${t.title}</p>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+          <div class="flex items-center space-x-1.5 text-slate-500 text-[11px]">
+            <span class="font-semibold text-slate-700 truncate max-w-[120px]">👤 ${t.reporter_name}</span>
+            <span class="text-slate-300">•</span>
+            <span class="text-slate-500 truncate max-w-[100px]">${t.category_name}</span>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            ${techBadge}
+            <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition shadow-sm">
+              Buka
+            </button>
+          </div>
+        </div>
+      `;
+      mobileCardContainer.appendChild(mCard);
+    }
   });
 
-  document.getElementById('colCountOpen').textContent = countOpen;
-  document.getElementById('colCountAssigned').textContent = countAssigned;
-  document.getElementById('colCountProgress').textContent = countProgress;
-  document.getElementById('colCountResolved').textContent = countResolved;
-  document.getElementById('badgeOpenCount').textContent = countOpen;
+  const countOpenEl = document.getElementById('colCountOpen');
+  const countAssignedEl = document.getElementById('colCountAssigned');
+  const countProgressEl = document.getElementById('colCountProgress');
+  const countResolvedEl = document.getElementById('colCountResolved');
+  const badgeOpenCountEl = document.getElementById('badgeOpenCount');
+
+  if (countOpenEl) countOpenEl.textContent = countOpen;
+  if (countAssignedEl) countAssignedEl.textContent = countAssigned;
+  if (countProgressEl) countProgressEl.textContent = countProgress;
+  if (countResolvedEl) countResolvedEl.textContent = countResolved;
+  if (badgeOpenCountEl) badgeOpenCountEl.textContent = countOpen;
 
   lucide.createIcons();
 }
@@ -1493,11 +1666,12 @@ async function loadTechnicians() {
       tbody.innerHTML = '';
       allTechnicians.forEach(t => {
         const tr = document.createElement('tr');
+        tr.className = 'whitespace-nowrap hover:bg-slate-50 transition';
         tr.innerHTML = `
-          <td class="p-3 font-bold text-slate-800">${t.name} <span class="text-[10px] text-slate-400">(@${t.username})</span></td>
-          <td class="p-3 text-slate-500">${t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT')}</td>
-          <td class="p-3 font-bold text-amber-600">${t.active_tickets || 0} Tiket</td>
-          <td class="p-3 font-bold text-emerald-600">${t.resolved_tickets || 0} Tiket Selesai</td>
+          <td class="p-3.5 font-bold text-slate-800 whitespace-nowrap">${t.name} <span class="text-[10px] text-slate-400">(@${t.username})</span></td>
+          <td class="p-3.5 text-slate-500 whitespace-nowrap">${t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT')}</td>
+          <td class="p-3.5 font-bold text-amber-600 whitespace-nowrap">${t.active_tickets || 0} Tiket</td>
+          <td class="p-3.5 font-bold text-emerald-600 whitespace-nowrap">${t.resolved_tickets || 0} Tiket Selesai</td>
         `;
         tbody.appendChild(tr);
       });
@@ -2789,6 +2963,7 @@ async function loadNotificationLogs() {
 
     logs.forEach(l => {
       const tr = document.createElement('tr');
+      tr.className = 'whitespace-nowrap hover:bg-slate-50 transition border-b border-slate-100';
       const badgeStatus = {
         sent: '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">SENT</span>',
         simulated: '<span class="bg-sky-100 text-sky-700 px-2 py-0.5 rounded text-[10px] font-bold">SIMULATED (LOGGED)</span>',
@@ -2796,12 +2971,12 @@ async function loadNotificationLogs() {
       }[l.status] || l.status;
 
       tr.innerHTML = `
-        <td class="p-3 text-slate-500">${new Date(l.created_at).toLocaleTimeString('id-ID')}</td>
-        <td class="p-3 font-bold uppercase text-slate-700">${l.channel}</td>
-        <td class="p-3 font-semibold text-slate-800">${l.recipient}</td>
-        <td class="p-3 text-slate-600">${l.title || '-'}</td>
-        <td class="p-3 max-w-xs truncate text-slate-500">${l.message.substring(0, 60)}...</td>
-        <td class="p-3">${badgeStatus}</td>
+        <td class="p-3.5 text-slate-500 whitespace-nowrap">${new Date(l.created_at).toLocaleTimeString('id-ID')}</td>
+        <td class="p-3.5 font-bold uppercase text-slate-700 whitespace-nowrap">${l.channel}</td>
+        <td class="p-3.5 font-semibold text-slate-800 whitespace-nowrap">${l.recipient}</td>
+        <td class="p-3.5 text-slate-600 whitespace-nowrap">${l.title || '-'}</td>
+        <td class="p-3.5 max-w-xs truncate text-slate-500">${l.message.substring(0, 60)}...</td>
+        <td class="p-3.5 whitespace-nowrap">${badgeStatus}</td>
       `;
       tbody.appendChild(tr);
     });

@@ -301,6 +301,28 @@ iframe[src*="netlify"] {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Styling Tabel Responsif Supaya Tidak Ada Kata yang Terpotong / Terhimpit */
+table.whitespace-nowrap th,
+table.whitespace-nowrap td {
+  white-space: nowrap !important;
+}
+
+/* Scrollbar halus untuk tabel horizontal di HP & Desktop */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 5px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
 /* Tampilan Input Tanggal Kalender Sangat Rapi & Seragam di Semua HP Android */
 input[type="date"] {
   display: block !important;
