@@ -684,22 +684,25 @@ async function submitAddRoom(e) {
 
 async function deleteRoom(roomId, roomName) {
   const result = await Swal.fire({
-    title: 'Nonaktifkan Ruangan / Unit?',
-    text: `Apakah Anda yakin ingin menonaktifkan "${roomName}"? Arsip riwayat tiket tetap 100% aman tersimpan.`,
+    title: 'Hapus Ruangan / Unit?',
+    text: `Apakah Anda yakin ingin menghapus "${roomName}"? Data unit akan terhapus langsung dari database Supabase.`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#dc2626',
     cancelButtonColor: '#64748b',
-    confirmButtonText: 'Ya, Nonaktifkan',
+    confirmButtonText: 'Ya, Hapus Permanen',
     cancelButtonText: 'Batal'
   });
 
   if (result.isConfirmed) {
     try {
       const res = await fetch(`/api/rooms/${roomId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Gagal menonaktifkan ruangan');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Gagal menghapus ruangan');
+      }
 
-      Swal.fire('Sukses', 'Ruangan berhasil dinonaktifkan', 'success');
+      Swal.fire('Terhapus', 'Ruangan berhasil dihapus dari database', 'success');
       await loadRoomsMaster();
     } catch (err) {
       Swal.fire('Error', err.message, 'error');
@@ -855,22 +858,25 @@ async function submitUserForm(e) {
 
 async function deleteUser(userId, userName) {
   const result = await Swal.fire({
-    title: 'Nonaktifkan Akun?',
-    text: `Apakah Anda yakin ingin menonaktifkan akun "${userName}"?`,
+    title: 'Hapus Akun Pengguna?',
+    text: `Apakah Anda yakin ingin menghapus akun "${userName}"? Data akun akan terhapus langsung dari database Supabase.`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#dc2626',
     cancelButtonColor: '#64748b',
-    confirmButtonText: 'Ya, Nonaktifkan',
+    confirmButtonText: 'Ya, Hapus Permanen',
     cancelButtonText: 'Batal'
   });
 
   if (result.isConfirmed) {
     try {
       const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Gagal menonaktifkan pengguna');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Gagal menghapus pengguna');
+      }
 
-      Swal.fire('Sukses', 'Pengguna berhasil dinonaktifkan', 'success');
+      Swal.fire('Terhapus', 'Akun pengguna berhasil dihapus dari database', 'success');
       await loadUsers();
       await loadTechnicians();
     } catch (err) {

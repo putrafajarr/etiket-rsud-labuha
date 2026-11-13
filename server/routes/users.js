@@ -117,18 +117,13 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE user
+// DELETE user (Hard delete with unassignment)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const ticketCount = await query.get('SELECT COUNT(*) as cnt FROM tickets WHERE assigned_to = ?', [id]);
-    if (ticketCount && parseInt(ticketCount.cnt, 10) > 0) {
-      await query.run('UPDATE users SET is_active = 0 WHERE id = ?', [id]);
-      res.json({ message: 'Pengguna memiliki riwayat tiket, dinonaktifkan dengan aman' });
-    } else {
-      await query.run('DELETE FROM users WHERE id = ?', [id]);
-      res.json({ message: 'Pengguna berhasil dihapus secara permanen' });
-    }
+    await query.run('UPDATE tickets SET assigned_to = NULL WHERE assigned_to = ?', [id]);
+    await query.run('DELETE FROM users WHERE id = ?', [id]);
+    res.json({ message: 'Pengguna berhasil dihapus secara permanen dari Supabase' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menghapus pengguna: ' + err.message });
   }

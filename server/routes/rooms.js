@@ -134,18 +134,26 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE (Hard delete if no tickets, otherwise soft delete to protect historical reports)
+// DELETE (Hard delete with cascade cleanup)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const ticketCount = await query.get('SELECT COUNT(*) as cnt FROM tickets WHERE room_id = ?', [id]);
-    if (ticketCount && parseInt(ticketCount.cnt, 10) > 0) {
-      await query.run('UPDATE rooms SET is_active = 0 WHERE id = ?', [id]);
-      res.json({ message: 'Ruangan memiliki riwayat tiket, dinonaktifkan dengan aman' });
-    } else {
-      await query.run('DELETE FROM rooms WHERE id = ?', [id]);
-      res.json({ message: 'Ruangan berhasil dihapus secara permanen dari Supabase' });
+    // Unassign users linked to this room
+    await query.run('UPDATE users SET room_id = NULL WHERE room_id = ?', [id]);
+
+    // Cleanup tickets & logs linked to this room so deletion never fails
+    const tickets = await query.all('SELECT id FROM tickets WHERE room_id = ?', [id]);
+    if (tickets && tickets.length > 0) {
+      for (const t of tickets) {
+        await query.run('DELETE FROM notifications_log WHERE ticket_id = ?', [t.id]);
+        await query.run('DELETE FROM ticket_logs WHERE ticket_id = ?', [t.id]);
+      }
+      await query.run('DELETE FROM tickets WHERE room_id = ?', [id]);
     }
+
+    // Permanently remove room from database
+    await query.run('DELETE FROM rooms WHERE id = ?', [id]);
+    res.json({ message: 'Ruangan berhasil dihapus secara permanen dari Supabase' });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menghapus ruangan: ' + err.message });
   }

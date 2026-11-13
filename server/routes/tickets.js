@@ -367,5 +367,18 @@ router.post('/:id/rate', async (req, res) => {
   }
 });
 
+// DELETE ticket (Admin cleanup)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query.run('DELETE FROM notifications_log WHERE ticket_id = ?', [id]);
+    await query.run('DELETE FROM ticket_logs WHERE ticket_id = ?', [id]);
+    await query.run('DELETE FROM tickets WHERE id = ?', [id]);
+    res.json({ message: 'Tiket berhasil dihapus secara permanen dari Supabase' });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menghapus tiket: ' + err.message });
+  }
+});
+
 module.exports = router;
 

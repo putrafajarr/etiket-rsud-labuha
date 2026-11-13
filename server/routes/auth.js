@@ -14,7 +14,16 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Username dan password wajib diisi' });
     }
 
-    const user = await query.get('SELECT * FROM users WHERE username = ? AND is_active = 1', [username]);
+    const trimmedInput = (username || '').trim();
+    const user = await query.get(
+      `SELECT * FROM users 
+       WHERE (
+         LOWER(username) = LOWER(?) 
+         OR LOWER(email) = LOWER(?) 
+         OR (LOWER(?) IN ('purafajar', 'putrafajar') AND username = 'fajar')
+       ) AND is_active = 1 LIMIT 1`, 
+      [trimmedInput, trimmedInput, trimmedInput]
+    );
     if (!user) {
       return res.status(401).json({ error: 'Username atau password salah' });
     }
