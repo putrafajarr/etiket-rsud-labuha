@@ -16,3 +16,4 @@ echo Setiap kali PC ini dinyalakan atau restart,
 echo server e-tiket akan otomatis langsung berjalan.
 echo ===================================================
 pause
+

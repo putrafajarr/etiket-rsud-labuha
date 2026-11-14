@@ -40,3 +40,4 @@ Buka folder `Etiket` di PC tersebut:
 2. Masuk ke **Pengaturan** -> klik **Ganti IP Server di APK**.
 3. Masukkan alamat IP yang muncul di PC tersebut (contoh: `http://192.168.0.xxx:3000`).
 4. Klik **Simpan**. Sekarang APK dan seluruh ruangan terhubung ke PC server baru!
+
