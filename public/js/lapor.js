@@ -216,15 +216,63 @@ function setupForm() {
     btn.innerHTML = `<span class="inline-block animate-spin mr-2">🔄</span> Mengirim Laporan...`;
 
     try {
-      const res = await fetch('/api/tickets', {
-        method: 'POST',
-        body: formData
-      });
+      let data = null;
+      try {
+        const res = await fetch('/api/tickets', {
+          method: 'POST',
+          body: formData
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (netErr) {
+        // Backend offline / static Cloudflare hosting
+      }
 
-      const data = await res.json();
+      // Direct Supabase Fallback jika backend Node.js tidak tersedia
+      if (!data || !data.ticket) {
+        const roomId = parseInt(document.getElementById('room_id').value);
+        const catId = parseInt(document.getElementById('category_id').value);
+        const matchedRoom = roomsData.find(r => r.id === roomId);
+        const matchedCat = categoriesData.find(c => c.id === catId);
+        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randomNum = Math.floor(1000 + Math.random() * 9000);
+        const generatedTicketNo = `TKT-${todayStr}-${randomNum}`;
 
-      if (!res.ok) {
-        throw new Error(data.error || 'Gagal mengirim laporan');
+        const payload = {
+          ticket_no: generatedTicketNo,
+          room_id: roomId,
+          room_name: matchedRoom ? matchedRoom.name : `Ruangan ${roomId}`,
+          category_id: catId,
+          category_name: matchedCat ? matchedCat.name : 'Umum',
+          reporter_name: document.getElementById('reporter_name').value.trim(),
+          reporter_phone: phone,
+          reporter_email: document.getElementById('reporter_email').value.trim() || null,
+          title: document.getElementById('title').value.trim(),
+          description: document.getElementById('description').value.trim(),
+          priority: matchedCat && matchedCat.default_priority ? matchedCat.default_priority : 'medium',
+          status: 'open',
+          channel: 'web_qr'
+        };
+
+        const supaRes = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets', {
+          method: 'POST',
+          headers: {
+            'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+            'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!supaRes.ok) {
+          const errText = await supaRes.text();
+          throw new Error('Gagal menyimpan laporan ke server: ' + errText);
+        }
+
+        const inserted = await supaRes.json();
+        data = { ticket: (Array.isArray(inserted) && inserted.length > 0) ? inserted[0] : payload };
       }
 
       const ticket = data.ticket;

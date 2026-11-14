@@ -137,6 +137,21 @@ async function checkAuthSession() {
     return false;
   }
 
+  // 1. Direct decode if token is Supabase standalone token
+  if (token.startsWith('sb_')) {
+    try {
+      const user = JSON.parse(decodeURIComponent(escape(atob(token.slice(3)))));
+      setAuthenticatedUser(user);
+      if (overlay) overlay.classList.add('hidden');
+      return true;
+    } catch (e) {
+      localStorage.removeItem('etiket_token');
+      if (overlay) overlay.classList.remove('hidden');
+      return false;
+    }
+  }
+
+  // 2. Otherwise verify with backend
   try {
     const res = await fetch('/api/auth/me', {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -147,6 +162,15 @@ async function checkAuthSession() {
     if (overlay) overlay.classList.add('hidden');
     return true;
   } catch (e) {
+    const cached = localStorage.getItem('etiket_cached_user');
+    if (cached) {
+      try {
+        const u = JSON.parse(cached);
+        setAuthenticatedUser(u);
+        if (overlay) overlay.classList.add('hidden');
+        return true;
+      } catch (err) {}
+    }
     localStorage.removeItem('etiket_token');
     if (overlay) overlay.classList.remove('hidden');
     return false;
@@ -155,6 +179,11 @@ async function checkAuthSession() {
 
 function setAuthenticatedUser(user) {
   activeUser = user;
+  if (user) {
+    try {
+      localStorage.setItem('etiket_cached_user', JSON.stringify(user));
+    } catch (e) {}
+  }
   const navName = document.getElementById('navUserName');
   const navRole = document.getElementById('navUserRole');
   if (navName) navName.textContent = user.name;
@@ -192,22 +221,68 @@ async function handleLogin(e) {
   btnSubmit.innerHTML = `<span>Memverifikasi...</span>`;
 
   try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Username atau password salah');
+    let authUser = null;
+    let authToken = null;
 
-    localStorage.setItem('etiket_token', data.token);
-    setAuthenticatedUser(data.user);
+    // 1. Coba login ke Backend Node.js
+    try {
+      const res = await window._originalFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        authUser = data.user;
+        authToken = data.token;
+      }
+    } catch (nodeErr) {
+      // Backend offline or static hosting
+    }
+
+    // 2. Fallback Supabase Cloud jika backend Node.js tidak tersedia (misal di Cloudflare)
+    if (!authUser) {
+      const supaUrl = `${SUPABASE_REST_URL}/users?or=(username.ilike.${encodeURIComponent(username)},email.ilike.${encodeURIComponent(username)})&is_active=neq.0`;
+      const supaRes = await window._originalFetch(supaUrl, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+        }
+      });
+
+      if (supaRes.ok) {
+        const rows = await supaRes.json();
+        if (rows && rows.length > 0) {
+          const u = rows[0];
+          let matched = false;
+          if (window.bcrypt && typeof window.bcrypt.compareSync === 'function') {
+            matched = window.bcrypt.compareSync(password, u.password_hash);
+          } else if (u.password_hash === password) {
+            matched = true;
+          }
+
+          if (matched) {
+            const safeUser = { ...u };
+            delete safeUser.password_hash;
+            authUser = safeUser;
+            authToken = 'sb_' + btoa(unescape(encodeURIComponent(JSON.stringify(safeUser))));
+          }
+        }
+      }
+    }
+
+    if (!authUser) {
+      throw new Error('Username atau password salah');
+    }
+
+    localStorage.setItem('etiket_token', authToken);
+    setAuthenticatedUser(authUser);
     document.getElementById('loginOverlay').classList.add('hidden');
 
     Swal.fire({
       icon: 'success',
       title: 'Selamat Datang!',
-      text: `Halo, ${data.user.name}. Selamat bertugas!`,
+      text: `Halo, ${authUser.name}. Selamat bertugas!`,
       timer: 1800,
       showConfirmButton: false
     });
@@ -387,10 +462,53 @@ async function smartFetch(url, options = {}) {
     }
   }
 
-  // 3. Fallback terakhir jika bukan GET atau server lokal
-  return window._originalFetch(targetUrl, options);
-}
+  // 3. Fallback jika PATCH status / assign tiket di Cloud
+  if (options && options.method === 'PATCH' && url.includes('/api/tickets/')) {
+    const ticketIdMatch = url.match(/\/api\/tickets\/(\d+)/);
+    if (ticketIdMatch) {
+      const tId = ticketIdMatch[1];
+      const supaHeaders = {
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      };
 
+      try {
+        let patchBody = {};
+        if (typeof options.body === 'string') {
+          patchBody = JSON.parse(options.body);
+        } else if (typeof options.body === 'object') {
+          patchBody = options.body;
+        }
+
+        if (patchBody.status === 'in_progress') {
+          patchBody.actual_response_time = new Date().toISOString();
+        } else if (patchBody.status === 'resolved' || patchBody.status === 'closed') {
+          patchBody.resolved_at = new Date().toISOString();
+        }
+
+        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/tickets?id=eq.${tId}`, {
+          method: 'PATCH',
+          headers: supaHeaders,
+          body: JSON.stringify(patchBody)
+        });
+
+        if (supaRes.ok) {
+          const updatedRows = await supaRes.json();
+          const ticket = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
+          return new Response(JSON.stringify({ success: true, ticket }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (err) {
+        console.warn('[SmartFetch] Direct Supabase PATCH fallback error:', err);
+      }
+    }
+  }
+
+  // 4. Fallback terakhir jika server lokal aktif
   return window._originalFetch(targetUrl, options);
 }
 
