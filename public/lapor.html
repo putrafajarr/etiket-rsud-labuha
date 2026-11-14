@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Lapor Kendala IT - RSUD LABUHA</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#0284c7">
@@ -20,13 +22,15 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <link rel="stylesheet" href="/css/custom.css">
 </head>
+
 <body class="bg-slate-100 text-slate-800 min-h-screen pb-24 sm:pb-16">
 
   <!-- Header RSUD Labuha -->
   <header class="bg-gradient-to-r from-sky-700 via-sky-600 to-teal-600 text-white shadow-md sticky top-0 z-30">
     <div class="max-w-2xl mx-auto px-3.5 sm:px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
       <div class="flex items-center space-x-2.5 sm:space-x-3 min-w-0">
-        <div class="w-9 h-9 sm:w-11 sm:h-11 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center font-bold text-lg sm:text-xl border border-white/30 shrink-0 shadow-sm">
+        <div
+          class="w-9 h-9 sm:w-11 sm:h-11 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center font-bold text-lg sm:text-xl border border-white/30 shrink-0 shadow-sm">
           🏥
         </div>
         <div class="min-w-0">
@@ -35,7 +39,8 @@
         </div>
       </div>
       <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
-        <a href="/track.html" class="inline-flex items-center text-[11px] sm:text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 sm:py-2 rounded-xl font-semibold transition backdrop-blur border border-white/20 active:scale-95">
+        <a href="/track.html"
+          class="inline-flex items-center text-[11px] sm:text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 sm:py-2 rounded-xl font-semibold transition backdrop-blur border border-white/20 active:scale-95">
           <i data-lucide="search" class="w-3.5 h-3.5 sm:mr-1"></i>
           <span class="hidden sm:inline ml-1">Lacak Status Tiket</span>
           <span class="sm:hidden ml-1">Lacak Tiket</span>
@@ -49,41 +54,51 @@
     <div class="bg-white rounded-2xl sm:rounded-3xl shadow-xl border border-slate-200/80 overflow-hidden">
       <!-- Banner / Title -->
       <div class="p-4 sm:p-5 bg-sky-50/70 border-b border-sky-100 flex items-center space-x-3">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-sky-600/30">
+        <div
+          class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-sky-600/30">
           <i data-lucide="wrench" class="w-4 h-4 sm:w-5 sm:h-5"></i>
         </div>
         <div>
           <h2 class="font-bold text-slate-800 text-sm sm:text-base">Formulir Laporan Kendala IT</h2>
-          <p class="text-[11px] sm:text-xs text-slate-500">Petugas IT akan segera datang & menindaklanjuti keluhan Anda</p>
+          <p class="text-[11px] sm:text-xs text-slate-500">Petugas IT akan segera datang & menindaklanjuti keluhan Anda
+          </p>
         </div>
       </div>
 
       <!-- Quick Room Locked Badge (If QR Scanned) -->
-      <div id="qrDetectedBadge" class="hidden m-3.5 sm:m-5 mb-0 p-3 sm:p-4 bg-emerald-50 border-2 border-emerald-500/40 rounded-xl sm:rounded-2xl flex items-center space-x-3 shadow-sm">
-        <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
+      <div id="qrDetectedBadge"
+        class="hidden m-3.5 sm:m-5 mb-0 p-3 sm:p-4 bg-emerald-50 border-2 border-emerald-500/40 rounded-xl sm:rounded-2xl flex items-center space-x-3 shadow-sm">
+        <div
+          class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-sm shrink-0">
           🔒
         </div>
         <div class="flex-1 min-w-0">
-          <span class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block">Lokasi Terdeteksi dari Barcode</span>
+          <span
+            class="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full inline-block">Lokasi
+            Terdeteksi dari Barcode</span>
           <p id="qrRoomName" class="font-black text-emerald-950 text-xs sm:text-sm mt-0.5 truncate"></p>
         </div>
       </div>
 
       <!-- Form -->
       <form id="reportForm" class="p-4 sm:p-6 space-y-4 sm:space-y-5" enctype="multipart/form-data">
-        
+
         <!-- Pilihan Ruangan -->
         <div id="roomSelectContainer">
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
-            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">1</span>
+          <label
+            class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">1</span>
             <span>Ruangan / Poli / Unit Kerja</span>
             <span class="text-rose-500">*</span>
           </label>
-          <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+          <div
+            class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
             <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-sky-600">
               <i data-lucide="door-open" class="w-4 h-4"></i>
             </div>
-            <select id="room_id" name="room_id" required class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
+            <select id="room_id" name="room_id" required
+              class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
               <option value="">-- Memuat Daftar Ruangan... --</option>
             </select>
             <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
@@ -94,16 +109,20 @@
 
         <!-- Kategori Kendala (Dimuat Otomatis dari Supabase) -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
-            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">2</span>
+          <label
+            class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">2</span>
             <span>Kategori Kendala IT</span>
             <span class="text-rose-500">*</span>
           </label>
-          <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+          <div
+            class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
             <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-sky-600">
               <i data-lucide="tag" class="w-4 h-4"></i>
             </div>
-            <select id="category_id" name="category_id" required class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
+            <select id="category_id" name="category_id" required
+              class="w-full pl-10 pr-10 py-3.5 bg-transparent text-sm font-semibold text-slate-800 outline-none appearance-none cursor-pointer">
               <option value="">-- Memuat Kategori Kendala... --</option>
             </select>
             <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
@@ -114,28 +133,34 @@
 
         <!-- Tingkat Urgensi / Prioritas -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
-            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">3</span>
+          <label
+            class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">3</span>
             <span>Tingkat Urgensi Masalah</span>
             <span class="text-rose-500">*</span>
           </label>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <label class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-sky-400 has-[:checked]:border-sky-600 has-[:checked]:bg-sky-50/70 has-[:checked]:ring-2 has-[:checked]:ring-sky-500 select-none">
+            <label
+              class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-sky-400 has-[:checked]:border-sky-600 has-[:checked]:bg-sky-50/70 has-[:checked]:ring-2 has-[:checked]:ring-sky-500 select-none">
               <input type="radio" name="priority" value="low" class="sr-only">
               <span class="block text-xs font-bold text-slate-700">Rendah</span>
               <span class="block text-[10px] text-slate-400 mt-0.5">Bisa ditunda</span>
             </label>
-            <label class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-amber-400 has-[:checked]:border-amber-600 has-[:checked]:bg-amber-50/70 has-[:checked]:ring-2 has-[:checked]:ring-amber-500 select-none">
+            <label
+              class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-amber-400 has-[:checked]:border-amber-600 has-[:checked]:bg-amber-50/70 has-[:checked]:ring-2 has-[:checked]:ring-amber-500 select-none">
               <input type="radio" name="priority" value="medium" checked class="sr-only">
               <span class="block text-xs font-bold text-amber-700">Sedang</span>
               <span class="block text-[10px] text-slate-400 mt-0.5">Normal (Default)</span>
             </label>
-            <label class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-orange-400 has-[:checked]:border-orange-600 has-[:checked]:bg-orange-50/70 has-[:checked]:ring-2 has-[:checked]:ring-orange-500 select-none">
+            <label
+              class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-slate-200 hover:border-orange-400 has-[:checked]:border-orange-600 has-[:checked]:bg-orange-50/70 has-[:checked]:ring-2 has-[:checked]:ring-orange-500 select-none">
               <input type="radio" name="priority" value="high" class="sr-only">
               <span class="block text-xs font-bold text-orange-700">Tinggi</span>
               <span class="block text-[10px] text-slate-400 mt-0.5">Menghambat kerja</span>
             </label>
-            <label class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-rose-200 hover:border-rose-400 has-[:checked]:border-rose-600 has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-rose-500 select-none">
+            <label
+              class="cursor-pointer border rounded-xl p-2.5 sm:p-3 text-center transition border-rose-200 hover:border-rose-400 has-[:checked]:border-rose-600 has-[:checked]:bg-rose-50 has-[:checked]:ring-2 has-[:checked]:ring-rose-500 select-none">
               <input type="radio" name="priority" value="critical" class="sr-only">
               <span class="block text-xs font-bold text-rose-700 flex items-center justify-center">
                 <i data-lucide="alert-triangle" class="w-3.5 h-3.5 mr-1 text-rose-600"></i> Kritis
@@ -147,35 +172,46 @@
 
         <!-- Uraian Keluhan -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
-            <span class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">4</span>
+          <label
+            class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center space-x-1.5">
+            <span
+              class="w-5 h-5 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center text-[10px] font-black">4</span>
             <span>Rincian / Kronologi Kendala</span>
             <span class="text-rose-500">*</span>
           </label>
-          <textarea id="description" name="description" rows="3" required placeholder="Jelaskan kendala apa yang terjadi secara rinci (contoh: Printer cetak SEP macet / Komputer billing kasir mati / Aplikasi SIMRS error / Jaringan internet putus)..." class="w-full px-3.5 py-3 rounded-xl border border-slate-300 hover:border-sky-400 focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20 text-sm text-slate-800 shadow-sm outline-none transition"></textarea>
+          <textarea id="description" name="description" rows="3" required
+            placeholder="Jelaskan kendala apa yang terjadi secara rinci (contoh: Printer cetak SEP macet / Komputer billing kasir mati / Aplikasi SIMRS error / Jaringan internet putus)..."
+            class="w-full px-3.5 py-3 rounded-xl border border-slate-300 hover:border-sky-400 focus:border-sky-600 focus:ring-2 focus:ring-sky-500/20 text-sm text-slate-800 shadow-sm outline-none transition"></textarea>
         </div>
 
         <!-- Upload Foto dari Kamera HP / Galeri -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+          <label
+            class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center justify-between">
             <span>5. Foto Bukti Kendala (Opsional)</span>
             <span class="text-[11px] text-sky-600 font-semibold">📸 Kamera / Galeri HP</span>
           </label>
-          <div class="relative border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-xl p-4 sm:p-5 text-center cursor-pointer bg-sky-50/30 hover:bg-sky-50/60 transition active:scale-[0.99]" onclick="document.getElementById('photoInput').click()">
-            <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" onchange="previewImage(this)">
+          <div
+            class="relative border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-xl p-4 sm:p-5 text-center cursor-pointer bg-sky-50/30 hover:bg-sky-50/60 transition active:scale-[0.99]"
+            onclick="document.getElementById('photoInput').click()">
+            <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden"
+              onchange="previewImage(this)">
             <div id="uploadPlaceholder" class="space-y-1">
               <i data-lucide="camera" class="w-8 h-8 mx-auto text-sky-600"></i>
               <p class="text-xs sm:text-sm font-bold text-slate-700">Ketuk untuk Ambil / Pilih Foto</p>
-              <p class="text-[11px] text-slate-400">Kamera HP atau Galeri (Foto layar error, kabel putus, printer macet)</p>
+              <p class="text-[11px] text-slate-400">Kamera HP atau Galeri (Foto layar error, kabel putus, printer macet)
+              </p>
             </div>
             <div id="imagePreviewContainer" class="hidden">
-              <img id="imagePreview" src="" alt="Preview" class="max-h-52 mx-auto rounded-lg shadow-sm border border-slate-200">
+              <img id="imagePreview" src="" alt="Preview"
+                class="max-h-52 mx-auto rounded-lg shadow-sm border border-slate-200">
               <div class="mt-2.5 flex items-center justify-center gap-3">
                 <span class="text-xs text-sky-700 font-bold inline-flex items-center space-x-1">
                   <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                   <span>Ketuk untuk ganti</span>
                 </span>
-                <button type="button" onclick="event.stopPropagation(); clearPhotoSelection()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold inline-flex items-center space-x-1 transition">
+                <button type="button" onclick="event.stopPropagation(); clearPhotoSelection()"
+                  class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold inline-flex items-center space-x-1 transition">
                   <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                   <span>Hapus Foto</span>
                 </button>
@@ -190,17 +226,20 @@
             <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Kontak Pelapor</p>
             <span class="text-[10px] text-emerald-600 font-semibold">✓ Diingat di HP Anda</span>
           </div>
-          
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label class="block text-xs font-bold text-slate-700 mb-1">
                 Nama Pelapor <span class="text-rose-500">*</span>
               </label>
-              <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+              <div
+                class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <i data-lucide="user" class="w-4 h-4 text-sky-600"></i>
                 </div>
-                <input type="text" id="reporter_name" name="reporter_name" required placeholder="Nama Anda (Perawat/Dokter/Staf)" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-semibold text-slate-800 outline-none">
+                <input type="text" id="reporter_name" name="reporter_name" required
+                  placeholder="Nama Anda (Perawat/Dokter/Staf)"
+                  class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-semibold text-slate-800 outline-none">
               </div>
             </div>
 
@@ -208,13 +247,16 @@
               <label class="block text-xs font-bold text-slate-700 mb-1">
                 Nomor WhatsApp <span class="text-rose-500">*</span>
               </label>
-              <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+              <div
+                class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <i data-lucide="phone" class="w-4 h-4 text-emerald-600"></i>
                 </div>
-                <input type="tel" id="reporter_phone" name="reporter_phone" required placeholder="08xxxxxxxxxx" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-bold text-slate-800 outline-none font-mono">
+                <input type="tel" id="reporter_phone" name="reporter_phone" required placeholder="08xxxxxxxxxx"
+                  class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm font-bold text-slate-800 outline-none font-mono">
               </div>
-              <span class="text-[10px] text-slate-400 mt-1 block">Untuk menerima update status &amp; notifikasi WhatsApp</span>
+              <span class="text-[10px] text-slate-400 mt-1 block">Untuk menerima update status &amp; notifikasi
+                WhatsApp</span>
             </div>
           </div>
 
@@ -222,11 +264,13 @@
             <label class="block text-xs font-bold text-slate-700 mb-1">
               Alamat Email (Opsional)
             </label>
-            <div class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
+            <div
+              class="relative rounded-xl border border-slate-300 bg-white hover:border-sky-400 focus-within:border-sky-600 focus-within:ring-2 focus-within:ring-sky-500/20 shadow-sm transition">
               <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                 <i data-lucide="mail" class="w-4 h-4 text-sky-600"></i>
               </div>
-              <input type="email" id="reporter_email" name="reporter_email" placeholder="nama@rsudlabuha.id" class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm text-slate-800 outline-none font-mono">
+              <input type="email" id="reporter_email" name="reporter_email" placeholder="nama@rsudlabuha.id"
+                class="w-full pl-10 pr-3.5 py-3 bg-transparent text-sm text-slate-800 outline-none font-mono">
             </div>
           </div>
         </div>
@@ -235,7 +279,8 @@
 
         <!-- Tombol Submit (Touch-Optimized for Mobile) -->
         <div class="pt-2">
-          <button type="submit" id="btnSubmit" class="w-full py-4 bg-gradient-to-r from-sky-600 via-sky-500 to-teal-600 hover:from-sky-700 hover:to-teal-700 text-white font-black rounded-xl sm:rounded-2xl shadow-lg shadow-sky-600/30 flex items-center justify-center space-x-2 transition transform active:scale-[0.98] text-sm sm:text-base">
+          <button type="submit" id="btnSubmit"
+            class="w-full py-4 bg-gradient-to-r from-sky-600 via-sky-500 to-teal-600 hover:from-sky-700 hover:to-teal-700 text-white font-black rounded-xl sm:rounded-2xl shadow-lg shadow-sky-600/30 flex items-center justify-center space-x-2 transition transform active:scale-[0.98] text-sm sm:text-base">
             <i data-lucide="send" class="w-4 h-4 sm:w-5 sm:h-5"></i>
             <span>KIRIM LAPORAN SEKARANG</span>
           </button>
@@ -251,8 +296,8 @@
     </div>
   </main>
 
-  <script src="/js/supabase-client.js?v=4.1"></script>
-  <script src="/js/lapor.js?v=4.1"></script>
+  <script src="/js/supabase-client.js?v=4.2"></script>
+  <script src="/js/lapor.js?v=4.2"></script>
   <script>
     lucide.createIcons();
     // Register Service Worker for PWA
@@ -261,5 +306,5 @@
     }
   </script>
 </body>
-</html>
 
+</html>

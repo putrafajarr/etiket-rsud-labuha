@@ -24,6 +24,10 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -35,6 +39,9 @@ public class TicketMonitorService extends Service {
     public static final String KEY_MONITOR_ENABLED = "monitor_enabled";
     public static final String KEY_LAST_SEEN_ID = "last_seen_id";
     public static final String KEY_LAST_NOTIFIED_ID = "last_notified_id";
+    public static final String KEY_TICKET_SNAPSHOTS = "ticket_snapshots_json";
+    public static final String KEY_EVENT_DEDUP = "event_dedup_json";
+    private static final Object SNAPSHOT_LOCK = new Object();
 
     public static final String CHANNEL_BG_ID = "etiket_monitor_bg_v1";
     public static final String CHANNEL_ALERT_ID = "etiket_urgent_alerts_v2";
@@ -193,32 +200,20 @@ public class TicketMonitorService extends Service {
 
             JSONObject json = new JSONObject(sb.toString());
             int latestId = json.optInt("latestId", 0);
+            JSONArray recentTickets = json.optJSONArray("recentTickets");
+            if (recentTickets != null && recentTickets.length() > 0) {
+                processPolledTickets(recentTickets, lastSeenId);
+                return;
+            }
 
             if (lastSeenId < 0) {
-                // First initialization: record baseline latestId without spamming old tickets
                 prefs.edit().putInt(KEY_LAST_SEEN_ID, latestId).apply();
                 return;
             }
 
             JSONArray newTickets = json.optJSONArray("newTickets");
             if (newTickets != null && newTickets.length() > 0) {
-                int maxSeen = lastSeenId;
-                for (int i = 0; i < newTickets.length(); i++) {
-                    JSONObject t = newTickets.optJSONObject(i);
-                    if (t == null) continue;
-                    int id = t.optInt("id", 0);
-                    if (id > maxSeen) {
-                        maxSeen = id;
-                    }
-                    String ticketNo = t.optString("ticket_no", "");
-                    String roomName = t.optString("room_name", "Ruangan RSUD");
-                    String title = t.optString("title", "Laporan Kendala IT Baru");
-                    String reporter = t.optString("reporter_name", "Staf RSUD");
-                    String priority = t.optString("priority", "medium");
-
-                    showTicketNotification(this, id, ticketNo, roomName, title, reporter, priority);
-                }
-                prefs.edit().putInt(KEY_LAST_SEEN_ID, Math.max(latestId, maxSeen)).apply();
+                processPolledTickets(newTickets, lastSeenId);
             } else if (latestId > lastSeenId) {
                 prefs.edit().putInt(KEY_LAST_SEEN_ID, latestId).apply();
             }
@@ -233,7 +228,7 @@ public class TicketMonitorService extends Service {
     }
 
     private void pollSupabaseDirectFallback(int lastSeenId) {
-        String supaUrl = "https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets?select=id,ticket_no,room_name,title,reporter_name,priority&order=id.desc&limit=10";
+        String supaUrl = "https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets?select=id,ticket_no,room_name,title,reporter_name,priority,status,assigned_to,assigned_to_name,updated_at&order=updated_at.desc.nullslast,id.desc&limit=30";
         String anonKey = "sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6";
         HttpURLConnection conn = null;
         try {
@@ -259,45 +254,219 @@ public class TicketMonitorService extends Service {
             reader.close();
 
             JSONArray tickets = new JSONArray(sb.toString());
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
-            if (lastSeenId < 0) {
-                int highest = 0;
-                for (int i = 0; i < tickets.length(); i++) {
-                    JSONObject t = tickets.optJSONObject(i);
-                    if (t != null && t.optInt("id", 0) > highest) {
-                        highest = t.optInt("id", 0);
-                    }
-                }
-                prefs.edit().putInt(KEY_LAST_SEEN_ID, highest).apply();
-                return;
-            }
-
-            int maxSeen = lastSeenId;
-            for (int i = 0; i < tickets.length(); i++) {
-                JSONObject t = tickets.optJSONObject(i);
-                if (t == null) continue;
-                int id = t.optInt("id", 0);
-                if (id > lastSeenId) {
-                    if (id > maxSeen) {
-                        maxSeen = id;
-                    }
-                    String ticketNo = t.optString("ticket_no", "");
-                    String roomName = t.optString("room_name", "Ruangan RSUD");
-                    String title = t.optString("title", "Laporan Kendala IT Baru");
-                    String reporter = t.optString("reporter_name", "Staf RSUD");
-                    String priority = t.optString("priority", "medium");
-
-                    showTicketNotification(this, id, ticketNo, roomName, title, reporter, priority);
-                }
-            }
-            if (maxSeen > lastSeenId) {
-                prefs.edit().putInt(KEY_LAST_SEEN_ID, maxSeen).apply();
-            }
+            processPolledTickets(tickets, lastSeenId);
         } catch (Exception ignored) {
         } finally {
             if (conn != null) {
                 conn.disconnect();
             }
+        }
+    }
+
+    private static JSONObject parseJsonObjectSafe(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return new JSONObject();
+        }
+        try {
+            return new JSONObject(raw);
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    private static String buildSnapshotValue(JSONObject t) {
+        String status = t.optString("status", "open");
+        if ("null".equalsIgnoreCase(status) || status.isEmpty()) status = "open";
+        int assignedTo = t.optInt("assigned_to", 0);
+        return status + "|" + assignedTo;
+    }
+
+    private static void pruneSnapshotMap(JSONObject snaps, int maxKeep) {
+        if (snaps == null || snaps.length() <= maxKeep) return;
+        List<Integer> ids = new ArrayList<>();
+        Iterator<String> keys = snaps.keys();
+        while (keys.hasNext()) {
+            try {
+                ids.add(Integer.parseInt(keys.next()));
+            } catch (NumberFormatException ignored) {}
+        }
+        Collections.sort(ids);
+        int removeCount = ids.size() - maxKeep;
+        for (int i = 0; i < removeCount; i++) {
+            snaps.remove(String.valueOf(ids.get(i)));
+        }
+    }
+
+    private static void recordEventState(Context ctx, int ticketId, String status, int assignedTo) {
+        if (ctx == null || ticketId <= 0) return;
+        String safeStatus = (status == null || status.isEmpty() || "null".equalsIgnoreCase(status)) ? "open" : status;
+        String snapVal = safeStatus + "|" + assignedTo;
+        String dedupKey = ticketId + "|" + snapVal;
+        long now = System.currentTimeMillis();
+
+        synchronized (SNAPSHOT_LOCK) {
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            JSONObject snaps = parseJsonObjectSafe(prefs.getString(KEY_TICKET_SNAPSHOTS, "{}"));
+            JSONObject dedups = parseJsonObjectSafe(prefs.getString(KEY_EVENT_DEDUP, "{}"));
+            try {
+                snaps.put(String.valueOf(ticketId), snapVal);
+                pruneSnapshotMap(snaps, 120);
+
+                // Prune dedup entries older than 2 minutes
+                List<String> stale = new ArrayList<>();
+                Iterator<String> dk = dedups.keys();
+                while (dk.hasNext()) {
+                    String k = dk.next();
+                    long ts = dedups.optLong(k, 0L);
+                    if (now - ts > 120_000L) {
+                        stale.add(k);
+                    }
+                }
+                for (String s : stale) dedups.remove(s);
+                dedups.put(dedupKey, now);
+            } catch (Exception ignored) {}
+
+            prefs.edit()
+                .putString(KEY_TICKET_SNAPSHOTS, snaps.toString())
+                .putString(KEY_EVENT_DEDUP, dedups.toString())
+                .apply();
+        }
+    }
+
+    private static boolean wasEventRecentlyDispatched(Context ctx, int ticketId, String status, int assignedTo) {
+        if (ctx == null || ticketId <= 0) return false;
+        String safeStatus = (status == null || status.isEmpty() || "null".equalsIgnoreCase(status)) ? "open" : status;
+        String dedupKey = ticketId + "|" + safeStatus + "|" + assignedTo;
+        long now = System.currentTimeMillis();
+
+        synchronized (SNAPSHOT_LOCK) {
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            JSONObject dedups = parseJsonObjectSafe(prefs.getString(KEY_EVENT_DEDUP, "{}"));
+            long ts = dedups.optLong(dedupKey, 0L);
+            return ts > 0 && (now - ts) <= 120_000L;
+        }
+    }
+
+    private void processPolledTickets(JSONArray tickets, int lastSeenId) {
+        if (tickets == null) return;
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+
+        if (lastSeenId < 0) {
+            int highest = 0;
+            JSONObject initialSnaps = new JSONObject();
+            for (int i = 0; i < tickets.length(); i++) {
+                JSONObject t = tickets.optJSONObject(i);
+                if (t == null) continue;
+                int id = t.optInt("id", 0);
+                if (id > highest) highest = id;
+                if (id > 0) {
+                    try {
+                        initialSnaps.put(String.valueOf(id), buildSnapshotValue(t));
+                    } catch (Exception ignored) {}
+                }
+            }
+            pruneSnapshotMap(initialSnaps, 120);
+            synchronized (SNAPSHOT_LOCK) {
+                prefs.edit()
+                    .putInt(KEY_LAST_SEEN_ID, highest)
+                    .putString(KEY_TICKET_SNAPSHOTS, initialSnaps.toString())
+                    .apply();
+            }
+            return;
+        }
+
+        final boolean hasSnapshotBaseline;
+        final JSONObject snaps;
+        synchronized (SNAPSHOT_LOCK) {
+            hasSnapshotBaseline = prefs.contains(KEY_TICKET_SNAPSHOTS);
+            snaps = parseJsonObjectSafe(prefs.getString(KEY_TICKET_SNAPSHOTS, "{}"));
+        }
+
+        int maxSeen = lastSeenId;
+        // Iterate from oldest item in batch to newest
+        for (int i = tickets.length() - 1; i >= 0; i--) {
+            JSONObject t = tickets.optJSONObject(i);
+            if (t == null) continue;
+            int id = t.optInt("id", 0);
+            if (id <= 0) continue;
+
+            String ticketNo = t.optString("ticket_no", "");
+            String roomName = t.optString("room_name", "Ruangan RSUD");
+            String title = t.optString("title", "Laporan Kendala IT Baru");
+            String reporter = t.optString("reporter_name", "Staf RSUD");
+            String priority = t.optString("priority", "medium");
+            String curStatus = t.optString("status", "open");
+            if ("null".equalsIgnoreCase(curStatus) || curStatus.isEmpty()) curStatus = "open";
+            int curAssignedTo = t.optInt("assigned_to", 0);
+            String curAssignedName = t.optString("assigned_to_name", "");
+            if ("null".equalsIgnoreCase(curAssignedName)) curAssignedName = "";
+
+            String idKey = String.valueOf(id);
+            String prevSnap = snaps.optString(idKey, "");
+
+            if (id > lastSeenId) {
+                if (id > maxSeen) maxSeen = id;
+                if (!"resolved".equalsIgnoreCase(curStatus) && !"closed".equalsIgnoreCase(curStatus)) {
+                    showTicketNotification(this, id, ticketNo, roomName, title, reporter, priority);
+                }
+            } else if (hasSnapshotBaseline && !prevSnap.isEmpty()) {
+                String[] parts = prevSnap.split("\\|", -1);
+                String prevStatus = parts.length > 0 ? parts[0] : "";
+                int prevAssignedTo = 0;
+                if (parts.length > 1) {
+                    try {
+                        prevAssignedTo = Integer.parseInt(parts[1]);
+                    } catch (NumberFormatException ignored) {}
+                }
+
+                boolean wasDone = "resolved".equalsIgnoreCase(prevStatus) || "closed".equalsIgnoreCase(prevStatus);
+                boolean isNowDone = "resolved".equalsIgnoreCase(curStatus) || "closed".equalsIgnoreCase(curStatus);
+
+                if (isNowDone && !wasDone) {
+                    if (!wasEventRecentlyDispatched(this, id, curStatus, curAssignedTo)) {
+                        String who = !curAssignedName.isEmpty() ? curAssignedName : "Tim IT";
+                        String body = (ticketNo.isEmpty() ? "" : ticketNo + " ") + "selesai dikerjakan oleh " + who + " • " + title;
+                        showEventNotification(
+                            this,
+                            id,
+                            "resolved",
+                            curStatus,
+                            curAssignedTo,
+                            "✅ Tiket Selesai: " + roomName,
+                            body.trim(),
+                            true
+                        );
+                    }
+                } else if (curAssignedTo > 0 && curAssignedTo != prevAssignedTo) {
+                    if (!wasEventRecentlyDispatched(this, id, curStatus, curAssignedTo)) {
+                        String who = !curAssignedName.isEmpty() ? curAssignedName : "Teknisi IT";
+                        String body = (ticketNo.isEmpty() ? "" : ticketNo + " ") + "didisposisikan ke " + who + " • " + title;
+                        showEventNotification(
+                            this,
+                            id,
+                            "assigned",
+                            curStatus,
+                            curAssignedTo,
+                            "👨‍🔧 Disposisi Tiket: " + roomName,
+                            body.trim(),
+                            true
+                        );
+                    }
+                }
+            }
+
+            try {
+                snaps.put(idKey, curStatus + "|" + curAssignedTo);
+            } catch (Exception ignored) {}
+        }
+
+        pruneSnapshotMap(snaps, 120);
+        synchronized (SNAPSHOT_LOCK) {
+            SharedPreferences.Editor editor = prefs.edit().putString(KEY_TICKET_SNAPSHOTS, snaps.toString());
+            if (maxSeen > lastSeenId) {
+                editor.putInt(KEY_LAST_SEEN_ID, maxSeen);
+            }
+            editor.apply();
         }
     }
 
@@ -325,10 +494,10 @@ public class TicketMonitorService extends Service {
 
             NotificationChannel alertChannel = new NotificationChannel(
                 CHANNEL_ALERT_ID,
-                "Tiket Masuk & Peringatan Darurat IT",
+                "Tiket Baru, Disposisi & Selesai",
                 NotificationManager.IMPORTANCE_HIGH
             );
-            alertChannel.setDescription("Notifikasi banner beranda HP & layar kunci saat ada laporan kendala baru");
+            alertChannel.setDescription("Notifikasi banner beranda HP & layar kunci untuk tiket baru, disposisi, dan selesai");
             alertChannel.enableLights(true);
             alertChannel.enableVibration(true);
             alertChannel.setVibrationPattern(new long[]{0, 400, 200, 400});
@@ -390,6 +559,31 @@ public class TicketMonitorService extends Service {
         String bodyText = title + " • Pelapor: " + reporterName + (ticketNo != null && !ticketNo.isEmpty() ? " (" + ticketNo + ")" : "");
 
         dispatchNotification(ctx, 10000 + ticketId, notifTitle, bodyText, isUrgent);
+    }
+
+    public static synchronized void showEventNotification(
+        Context ctx,
+        int ticketId,
+        String eventType,
+        String status,
+        int assignedTo,
+        String notifTitle,
+        String notifBody,
+        boolean highPriority
+    ) {
+        ensureChannels(ctx);
+        if (ticketId > 0) {
+            recordEventState(ctx, ticketId, status, assignedTo);
+        }
+
+        int baseOffset = 40000;
+        if ("resolved".equalsIgnoreCase(eventType) || "resolved".equalsIgnoreCase(status) || "closed".equalsIgnoreCase(status)) {
+            baseOffset = 20000;
+        } else if ("assigned".equalsIgnoreCase(eventType)) {
+            baseOffset = 30000;
+        }
+        int safeId = ticketId > 0 ? (baseOffset + ticketId) : ((int) (System.currentTimeMillis() % 9000) + baseOffset);
+        dispatchNotification(ctx, safeId, notifTitle, notifBody, highPriority);
     }
 
     public static void fireSampleTestNotification(Context ctx) {

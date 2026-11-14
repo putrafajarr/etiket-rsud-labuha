@@ -66,9 +66,9 @@
     const pageIsHttps = global.location && global.location.protocol === 'https:';
     const currentHost = (global.location && global.location.hostname) || '';
 
-    // Ignore stale HTTP LAN URLs or old dead trycloudflare tunnels when served over HTTPS
+    // Ignore stale HTTP LAN URLs, old dead trycloudflare tunnels, or static workers.dev host
     if (customBase) {
-      if (customBase.includes('trycloudflare.com')) return null;
+      if (customBase.includes('trycloudflare.com') || customBase.includes('workers.dev')) return null;
       if (pageIsHttps && customBase.startsWith('http://')) return null;
       return customBase;
     }
@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.1');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.2');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.1').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.2').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;

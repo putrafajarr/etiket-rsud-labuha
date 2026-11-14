@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.1">
+  <link rel="stylesheet" href="/css/custom.css?v=4.2">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -503,6 +503,10 @@
             <p class="text-xs text-slate-500">Rekapitulasi kendala, waktu respon MTTR, dan kepatuhan SLA</p>
           </div>
           <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <button type="button" onclick="openEditSignersModal()" class="flex-1 sm:flex-initial px-3.5 py-2.5 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-sm active:scale-95">
+              <i data-lucide="pen-tool" class="w-4 h-4"></i>
+              <span>Edit Penandatangan</span>
+            </button>
             <button onclick="exportExcel()" class="flex-1 sm:flex-initial px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-md shadow-emerald-600/20 active:scale-95">
               <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
               <span>Export Excel (.XLSX)</span>
@@ -512,6 +516,23 @@
               <span>Cetak Laporan Resmi</span>
             </button>
           </div>
+        </div>
+
+        <!-- Preview & Quick Edit Pejabat Penandatangan Laporan -->
+        <div class="bg-sky-50/70 p-3.5 sm:p-4 rounded-2xl border border-sky-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+          <div class="space-y-0.5 text-slate-700">
+            <div class="font-bold text-sky-950 flex items-center gap-1.5">
+              <span>✍️ Pejabat Penandatangan Laporan Resmi</span>
+            </div>
+            <p class="text-[11px] text-slate-600 leading-relaxed">
+              <b>Direktur:</b> <span id="reportDirectorPreview" class="font-bold text-slate-800">dr. Surahman, Sp.PD</span> (<span id="reportDirectorNipPreview">NIP. 19780512 200604 1 008</span>)
+              <span class="mx-1.5 text-slate-300">|</span>
+              <b>Kepala Instalasi SIMRS &amp; IT:</b> <span id="reportHeadPreview" class="font-bold text-slate-800">Fahmi Mansur, S.Kom</span> (<span id="reportHeadNipPreview">NIP. 19850914 201001 1 012</span>)
+            </p>
+          </div>
+          <button type="button" onclick="openEditSignersModal()" class="self-start sm:self-center shrink-0 px-3 py-1.5 bg-white hover:bg-sky-100 text-sky-700 border border-sky-300 font-bold rounded-xl text-[11px] transition shadow-xs">
+            Ubah Nama / NIP
+          </button>
         </div>
 
         <!-- Filter Kalender Laporan Harian / Periode (Responsif & Rapi) -->
@@ -700,6 +721,48 @@
               <span class="text-[10px] text-slate-500 block">
                 💡 <b>Petunjuk:</b> Gunakan domain cloud aktif (contoh: <code>https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev</code> atau domain resmi RSUD Labuha) agar QR Code ruangan &amp; APK terhubung ke database Supabase Cloud dari mana saja.
               </span>
+            </div>
+          </div>
+
+          <!-- Report Signatories Configuration -->
+          <div class="p-4 sm:p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-2.5">
+                <span class="text-2xl">✍️</span>
+                <div>
+                  <h3 class="font-bold text-slate-900 text-sm">Pejabat Penandatangan Laporan (Direktur &amp; Kepala Instalasi SIMRS &amp; IT)</h3>
+                  <p class="text-[11px] text-slate-500">Tampil otomatis pada cetak laporan resmi PDF &amp; Excel baik di Web (workers.dev) maupun APK</p>
+                </div>
+              </div>
+              <button type="button" onclick="saveSignersFromGateway()" class="px-3.5 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs transition shadow-sm">
+                Simpan Penandatangan
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                <span class="block font-bold text-sky-900 text-[11px] uppercase tracking-wider">Direktur RSUD Labuha</span>
+                <div>
+                  <label for="cfg_director_name" class="block font-bold text-slate-700 mb-1">Nama Direktur &amp; Gelar</label>
+                  <input type="text" id="cfg_director_name" placeholder="dr. Surahman, Sp.PD" class="w-full p-2.5 border rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div>
+                  <label for="cfg_director_nip" class="block font-bold text-slate-700 mb-1">NIP Direktur</label>
+                  <input type="text" id="cfg_director_nip" placeholder="NIP. 19780512 200604 1 008" class="w-full p-2.5 border rounded-xl text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+              </div>
+
+              <div class="bg-white p-3.5 rounded-xl border border-slate-200 space-y-2.5">
+                <span class="block font-bold text-teal-900 text-[11px] uppercase tracking-wider">Kepala Instalasi SIMRS &amp; IT</span>
+                <div>
+                  <label for="cfg_head_simrs_name" class="block font-bold text-slate-700 mb-1">Nama Kepala Instalasi SIMRS &amp; IT</label>
+                  <input type="text" id="cfg_head_simrs_name" placeholder="Fahmi Mansur, S.Kom" class="w-full p-2.5 border rounded-xl text-xs font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+                <div>
+                  <label for="cfg_head_simrs_nip" class="block font-bold text-slate-700 mb-1">NIP Kepala Instalasi SIMRS &amp; IT</label>
+                  <input type="text" id="cfg_head_simrs_nip" placeholder="NIP. 19850914 201001 1 012" class="w-full p-2.5 border rounded-xl text-xs font-mono text-slate-700 outline-none focus:ring-2 focus:ring-sky-500">
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1312,7 +1375,7 @@
         <div class="mt-4 pt-3 border-t border-slate-100 text-center">
           <a href="/downloads/ETIKET-RSUD-LABUHA.apk" download class="inline-flex items-center space-x-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition shadow-sm active:scale-95">
             <span>📲</span>
-            <span>Download APK Android Resmi (v1.3)</span>
+            <span>Download APK Android Resmi (v1.4)</span>
           </a>
           <p class="text-[10px] text-slate-400 mt-1">Notifikasi pop-up &amp; suara alarm tiket langsung di HP</p>
         </div>
@@ -1320,11 +1383,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.1"></script>
-  <script src="/js/bcrypt.min.js?v=4.1"></script>
-  <script src="/js/supabase-client.js?v=4.1"></script>
-  <script src="/js/sound.js?v=4.1"></script>
-  <script src="/js/app.js?v=4.1"></script>
+  <script src="/js/qrcode.min.js?v=4.2"></script>
+  <script src="/js/bcrypt.min.js?v=4.2"></script>
+  <script src="/js/supabase-client.js?v=4.2"></script>
+  <script src="/js/sound.js?v=4.2"></script>
+  <script src="/js/app.js?v=4.2"></script>
 </body>
 </html>
 

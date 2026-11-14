@@ -44,7 +44,7 @@ public class EtiketNativePlugin extends Plugin {
         SharedPreferences.Editor editor = prefs.edit();
         if (serverUrl != null && !serverUrl.trim().isEmpty()) {
             String lower = serverUrl.trim().toLowerCase();
-            if (!lower.contains("://localhost") && !lower.contains("://127.0.0.1") && !lower.contains("workers.dev")) {
+            if (!lower.contains("://localhost") && !lower.contains("://127.0.0.1")) {
                 editor.putString(TicketMonitorService.KEY_SERVER_URL, serverUrl.trim());
             }
         }
@@ -85,6 +85,32 @@ public class EtiketNativePlugin extends Plugin {
         String priority = call.getString("priority", "medium");
 
         TicketMonitorService.showTicketNotification(getContext(), id, ticketNo, roomName, title, reporter, priority);
+
+        JSObject ret = new JSObject();
+        ret.put("ok", true);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void notifyEventNow(PluginCall call) {
+        int ticketId = call.getInt("ticketId", call.getInt("id", 0));
+        String eventType = call.getString("eventType", "status");
+        String status = call.getString("status", "");
+        int assignedTo = call.getInt("assignedTo", 0);
+        String title = call.getString("title", "Pembaruan Tiket IT");
+        String body = call.getString("body", "Ada pembaruan status tiket.");
+        boolean highPriority = Boolean.TRUE.equals(call.getBoolean("highPriority", true));
+
+        TicketMonitorService.showEventNotification(
+            getContext(),
+            ticketId,
+            eventType,
+            status,
+            assignedTo,
+            title,
+            body,
+            highPriority
+        );
 
         JSObject ret = new JSObject();
         ret.put("ok", true);

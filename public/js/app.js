@@ -15,14 +15,18 @@ let selectedTicketForModal = null;
 let categoryChartInstance = null;
 let roomChartInstance = null;
 let filterTimeout = null;
+let appSettings = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
   initMobileNativeBridge();
   await checkAuthSession();
-  await loadRoomsMaster();
-  await loadTechnicians();
-  await loadTickets();
-  await loadStats();
+  await Promise.all([
+    loadRoomsMaster(),
+    loadTechnicians(),
+    loadTickets(),
+    loadStats(),
+    loadAppSettings()
+  ]);
   initSocket();
   startAutoSync();
   lucide.createIcons();
@@ -340,8 +344,37 @@ async function initSocket() {
       });
 
       socket.on('ticket_updated', (data) => {
+        const ut = data && data.ticket;
         if (data.action === 'resolved') {
           if (window.soundAlert) window.soundAlert.playSuccess();
+          if (ut) {
+            notifyNativeGeneric(
+              `✅ Tiket Selesai: ${ut.room_name || 'Ruangan RSUD'}`,
+              `${ut.ticket_no || ''} telah diselesaikan oleh ${ut.assigned_to_name || 'Tim IT'}`,
+              {
+                ticketId: ut.id,
+                ticketNo: ut.ticket_no,
+                roomName: ut.room_name,
+                status: ut.status || 'resolved',
+                assignedTo: ut.assigned_to || 0,
+                eventType: 'resolved'
+              }
+            );
+          }
+        } else if (data.action === 'assigned' && ut) {
+          if (window.soundAlert) window.soundAlert.playChime();
+          notifyNativeGeneric(
+            `👨‍🔧 Disposisi Tiket: ${ut.room_name || 'Ruangan RSUD'}`,
+            `${ut.ticket_no || ''} ditugaskan ke ${ut.assigned_to_name || 'Teknisi IT'}`,
+            {
+              ticketId: ut.id,
+              ticketNo: ut.ticket_no,
+              roomName: ut.room_name,
+              status: ut.status || 'in_progress',
+              assignedTo: ut.assigned_to || 0,
+              eventType: 'assigned'
+            }
+          );
         }
         loadTickets();
         loadStats();
@@ -452,8 +485,20 @@ async function runRealtimeSyncCycle() {
               // Disposisi / Kunci Tiket Berpindah
               if (ft.assigned_to !== oldT.assigned_to) {
                 const isMe = activeUser && (ft.assigned_to === activeUser.id || ft.assigned_to_name === activeUser.name);
+                if (window.soundAlert) window.soundAlert.playChime();
                 if (isMe) {
-                  if (window.soundAlert) window.soundAlert.playChime();
+                  notifyNativeGeneric(
+                    `📋 Disposisi untuk Anda: ${ft.room_name || 'Ruangan RSUD'}`,
+                    `${ft.ticket_no || ''} ditugaskan kepada Anda (${ft.title || ''})`,
+                    {
+                      ticketId: ft.id,
+                      ticketNo: ft.ticket_no,
+                      roomName: ft.room_name,
+                      status: ft.status || 'in_progress',
+                      assignedTo: ft.assigned_to || 0,
+                      eventType: 'assigned'
+                    }
+                  );
                   Swal.fire({
                     toast: true,
                     position: 'top-end',
@@ -465,6 +510,20 @@ async function runRealtimeSyncCycle() {
                     timerProgressBar: true
                   });
                 } else {
+                  if (ft.assigned_to) {
+                    notifyNativeGeneric(
+                      `👨‍🔧 Disposisi Tiket: ${ft.room_name || 'Ruangan RSUD'}`,
+                      `${ft.ticket_no || ''} ditugaskan ke ${ft.assigned_to_name || 'Teknisi IT'}`,
+                      {
+                        ticketId: ft.id,
+                        ticketNo: ft.ticket_no,
+                        roomName: ft.room_name,
+                        status: ft.status || 'in_progress',
+                        assignedTo: ft.assigned_to || 0,
+                        eventType: 'assigned'
+                      }
+                    );
+                  }
                   Swal.fire({
                     toast: true,
                     position: 'top-end',
@@ -482,6 +541,18 @@ async function runRealtimeSyncCycle() {
               if (ft.status !== oldT.status) {
                 if (ft.status === 'resolved' || ft.status === 'closed') {
                   if (window.soundAlert) window.soundAlert.playSuccess();
+                  notifyNativeGeneric(
+                    `✅ Tiket Selesai: ${ft.room_name || 'Ruangan RSUD'}`,
+                    `${ft.ticket_no || ''} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                    {
+                      ticketId: ft.id,
+                      ticketNo: ft.ticket_no,
+                      roomName: ft.room_name,
+                      status: ft.status,
+                      assignedTo: ft.assigned_to || 0,
+                      eventType: 'resolved'
+                    }
+                  );
                   Swal.fire({
                     toast: true,
                     position: 'top-end',
@@ -692,7 +763,7 @@ async function triggerManualSync() {
   if (icon) icon.classList.add('animate-spin');
 
   await runRealtimeSyncCycle();
-  await loadStats();
+  await Promise.all([loadStats(), loadAppSettings()]);
 
   setTimeout(() => {
     if (icon) icon.classList.remove('animate-spin');
@@ -833,6 +904,8 @@ function switchTab(tab) {
   } else if (tab === 'rooms') {
     loadRoomsMaster();
   } else if (tab === 'reports') {
+    updateSignersPreview();
+    loadAppSettings();
     loadReportsData();
   } else if (tab === 'gateway') {
     loadGatewaySettings();
@@ -1763,6 +1836,7 @@ async function claimTicketSelf() {
 
   const savedTicketNo = selectedTicketForModal.ticket_no;
   const savedRoom = selectedTicketForModal.room_name;
+  const savedAssignedTo = Number(selectedTicketForModal.assigned_to || 0);
   const ticketId = selectedTicketForModal.id;
 
   try {
@@ -1791,13 +1865,20 @@ async function claimTicketSelf() {
       timerProgressBar: true
     });
 
-    // Notifikasi sistem HP (Android Status Bar & Lock Screen)
-    if (typeof notifyNativeGeneric === 'function') {
-      notifyNativeGeneric(
-        `🔒 Tiket Diambil: ${savedRoom}`,
-        `${savedTicketNo} telah Anda ambil & terkunci atas nama ${activeUser.name}`
-      );
-    }
+    // Notifikasi sistem HP (Beranda & Layar Kunci)
+    notifyNativeGeneric(
+      `🔒 Tiket Diambil: ${savedRoom}`,
+      `${savedTicketNo} telah Anda ambil & terkunci atas nama ${activeUser.name}`,
+      {
+        ticketId,
+        ticketNo: savedTicketNo,
+        roomName: savedRoom,
+        status: 'in_progress',
+        assignedTo: Number(activeUser.id) || 0,
+        assignedToName: activeUser.name,
+        eventType: 'assigned'
+      }
+    );
 
     await loadTickets();
     await loadStats();
@@ -2077,6 +2158,7 @@ async function assignTechnician() {
 
   const savedTicketNo = selectedTicketForModal.ticket_no;
   const savedRoom = selectedTicketForModal.room_name;
+  const savedAssignedTo = Number(selectedTicketForModal.assigned_to || 0);
   const ticketId = selectedTicketForModal.id;
 
   try {
@@ -2103,12 +2185,19 @@ async function assignTechnician() {
       timerProgressBar: true
     });
 
-    if (typeof notifyNativeGeneric === 'function') {
-      notifyNativeGeneric(
-        `👨‍🔧 Disposisi Tiket: ${savedRoom}`,
-        `${savedTicketNo} dialihkan ke ${targetTechName}`
-      );
-    }
+    notifyNativeGeneric(
+      `👨‍🔧 Disposisi Tiket: ${savedRoom}`,
+      `${savedTicketNo} didisposisikan ke ${targetTechName}`,
+      {
+        ticketId,
+        ticketNo: savedTicketNo,
+        roomName: savedRoom,
+        status: 'in_progress',
+        assignedTo: Number(techId) || 0,
+        assignedToName: targetTechName,
+        eventType: 'assigned'
+      }
+    );
 
     await loadTickets();
     await loadTechnicians();
@@ -2144,6 +2233,7 @@ async function updateTicketStatus() {
 
   const savedTicketNo = selectedTicketForModal.ticket_no;
   const savedRoom = selectedTicketForModal.room_name;
+  const savedAssignedTo = Number(selectedTicketForModal.assigned_to || 0);
   const ticketId = selectedTicketForModal.id;
 
   const formData = new FormData();
@@ -2177,12 +2267,21 @@ async function updateTicketStatus() {
       timerProgressBar: true
     });
 
-    if (typeof notifyNativeGeneric === 'function') {
-      notifyNativeGeneric(
-        status === 'resolved' || status === 'closed' ? `✅ Tiket Selesai: ${savedRoom}` : `🔄 Status Tiket: ${savedRoom}`,
-        `${savedTicketNo} status: ${status.toUpperCase()}`
-      );
-    }
+    const isResolvedStatus = status === 'resolved' || status === 'closed';
+    notifyNativeGeneric(
+      isResolvedStatus ? `✅ Tiket Selesai: ${savedRoom}` : `🔄 Status Tiket: ${savedRoom}`,
+      isResolvedStatus
+        ? `${savedTicketNo} telah selesai dikerjakan oleh ${activeUser.name || 'Tim IT'}${notes ? ' • ' + notes : ''}`
+        : `${savedTicketNo} status: ${status.toUpperCase()}`,
+      {
+        ticketId,
+        ticketNo: savedTicketNo,
+        roomName: savedRoom,
+        status,
+        assignedTo: savedAssignedTo,
+        eventType: isResolvedStatus ? 'resolved' : 'status'
+      }
+    );
 
     await loadTickets();
     await loadStats();
@@ -2360,6 +2459,7 @@ function onReportDateChange() {
 
 // Load Reports Charts (Real-Time from Memory with Smooth Update)
 function loadReportsData() {
+  updateSignersPreview();
   try {
     const start = document.getElementById('reportStartDate')?.value || '';
     const end = document.getElementById('reportEndDate')?.value || '';
@@ -2481,6 +2581,7 @@ function generateClientPrintHtml(startDate, endDate) {
   const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
   const openCount = tickets.filter(t => t.status === 'open' || t.status === 'assigned').length;
 
+  const signers = getReportSigners();
   const todayStr = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
     month: 'long',
@@ -2709,15 +2810,15 @@ function generateClientPrintHtml(startDate, endDate) {
     <div class="sig-column">
       <p>Mengetahui,<br><strong>Direktur RSUD Labuha</strong></p>
       <div class="sig-space"></div>
-      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">dr. Surahman, Sp.PD</p>
-      <p style="margin: 0; font-size: 10pt;">NIP. 19780512 200604 1 008</p>
+      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">${esc(signers.directorName)}</p>
+      <p style="margin: 0; font-size: 10pt;">${esc(signers.directorNip)}</p>
     </div>
 
     <div class="sig-column">
       <p>Labuha, ${todayStr}<br><strong>Kepala Instalasi SIMRS &amp; IT</strong></p>
       <div class="sig-space"></div>
-      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">Fahmi Mansur, S.Kom</p>
-      <p style="margin: 0; font-size: 10pt;">NIP. 19850914 201001 1 012</p>
+      <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">${esc(signers.headName)}</p>
+      <p style="margin: 0; font-size: 10pt;">${esc(signers.headNip)}</p>
     </div>
   </div>
 </body>
@@ -2742,8 +2843,9 @@ async function exportExcel() {
   Swal.fire({ title: 'Menyiapkan File Excel...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
   try {
+    await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.1');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.2');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
@@ -2791,6 +2893,29 @@ async function exportExcel() {
       });
     });
 
+    const signers = getReportSigners();
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    sheet.addRow([]);
+    const sigHeaderRow = sheet.addRow([]);
+    sigHeaderRow.getCell(3).value = 'Mengetahui, Direktur RSUD Labuha';
+    sigHeaderRow.getCell(10).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
+    sigHeaderRow.getCell(3).font = { bold: true };
+    sigHeaderRow.getCell(10).font = { bold: true };
+    sheet.addRow([]);
+    sheet.addRow([]);
+    const sigNamesRow = sheet.addRow([]);
+    sigNamesRow.getCell(3).value = signers.directorName;
+    sigNamesRow.getCell(10).value = signers.headName;
+    sigNamesRow.getCell(3).font = { bold: true, underline: true };
+    sigNamesRow.getCell(10).font = { bold: true, underline: true };
+    const sigNipsRow = sheet.addRow([]);
+    sigNipsRow.getCell(3).value = signers.directorNip;
+    sigNipsRow.getCell(10).value = signers.headNip;
+
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `Rekap-ETiket-RSUD-Labuha-${new Date().toISOString().slice(0, 10)}.xlsx`;
     const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -2831,8 +2956,8 @@ async function exportExcel() {
   }
 }
 
-// Print Official HTML / PDF (Instantly opens in 0ms with local generator)
-function printOfficialReport() {
+// Print Official HTML / PDF (Refreshes latest signers then renders cleanly)
+async function printOfficialReport() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
 
@@ -2842,7 +2967,7 @@ function printOfficialReport() {
 
   if (modal && frame) {
     modal.classList.remove('hidden');
-    // Generate instant preview in 0 milliseconds!
+    await loadAppSettings();
     const html = generateClientPrintHtml(start, end);
     frame.srcdoc = html;
     if (loading) loading.classList.add('hidden');
@@ -2893,11 +3018,160 @@ function getDefaultPublicOrigin() {
   return origin;
 }
 
+function getReportSigners() {
+  const s = appSettings || {};
+  const directorName = (s.director_name || '').trim() || 'dr. Surahman, Sp.PD';
+  const directorNip = s.director_nip !== undefined ? String(s.director_nip).trim() : 'NIP. 19780512 200604 1 008';
+  const headName = (s.head_simrs_name || '').trim() || 'Fahmi Mansur, S.Kom';
+  const headNip = s.head_simrs_nip !== undefined ? String(s.head_simrs_nip).trim() : 'NIP. 19850914 201001 1 012';
+  return { directorName, directorNip, headName, headNip };
+}
+
+function updateSignersPreview() {
+  const signers = getReportSigners();
+  const dirEl = document.getElementById('reportDirectorPreview');
+  const dirNipEl = document.getElementById('reportDirectorNipPreview');
+  const headEl = document.getElementById('reportHeadPreview');
+  const headNipEl = document.getElementById('reportHeadNipPreview');
+  if (dirEl) dirEl.textContent = signers.directorName;
+  if (dirNipEl) dirNipEl.textContent = signers.directorNip || '-';
+  if (headEl) headEl.textContent = signers.headName;
+  if (headNipEl) headNipEl.textContent = signers.headNip || '-';
+
+  const cfgDir = document.getElementById('cfg_director_name');
+  const cfgDirNip = document.getElementById('cfg_director_nip');
+  const cfgHead = document.getElementById('cfg_head_simrs_name');
+  const cfgHeadNip = document.getElementById('cfg_head_simrs_nip');
+  if (cfgDir) cfgDir.value = signers.directorName;
+  if (cfgDirNip) cfgDirNip.value = signers.directorNip;
+  if (cfgHead) cfgHead.value = signers.headName;
+  if (cfgHeadNip) cfgHeadNip.value = signers.headNip;
+}
+
+async function loadAppSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    if (res && res.ok) {
+      const cfg = await res.json();
+      if (cfg && typeof cfg === 'object') {
+        appSettings = cfg;
+        updateSignersPreview();
+      }
+    }
+  } catch (err) {
+    console.debug('Load app settings warning:', err);
+  }
+  return appSettings;
+}
+
+async function saveSignersPayload(payload) {
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error('Gagal menyimpan data penandatangan');
+  appSettings = Object.assign({}, appSettings || {}, payload);
+  updateSignersPreview();
+}
+
+async function openEditSignersModal() {
+  await loadAppSettings();
+  const signers = getReportSigners();
+  const result = await Swal.fire({
+    title: 'Edit Pejabat Penandatangan Laporan',
+    html: `
+      <div class="text-left text-xs space-y-3 pt-1">
+        <div class="p-3 bg-sky-50/70 rounded-xl border border-sky-200 space-y-2">
+          <p class="font-bold text-sky-900">Direktur RSUD Labuha</p>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Nama Direktur &amp; Gelar</label>
+            <input id="swalDirectorName" type="text" value="${esc(signers.directorName)}" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">NIP Direktur</label>
+            <input id="swalDirectorNip" type="text" value="${esc(signers.directorNip)}" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-700">
+          </div>
+        </div>
+        <div class="p-3 bg-teal-50/70 rounded-xl border border-teal-200 space-y-2">
+          <p class="font-bold text-teal-900">Kepala Instalasi SIMRS &amp; IT</p>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Nama Kepala Instalasi SIMRS &amp; IT</label>
+            <input id="swalHeadName" type="text" value="${esc(signers.headName)}" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-800">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">NIP Kepala Instalasi SIMRS &amp; IT</label>
+            <input id="swalHeadNip" type="text" value="${esc(signers.headNip)}" class="w-full p-2.5 border border-slate-300 rounded-xl text-xs font-mono text-slate-700">
+          </div>
+        </div>
+      </div>
+    `,
+    showCancelButton: true,
+    confirmButtonText: 'Simpan Perubahan',
+    cancelButtonText: 'Batal',
+    confirmButtonColor: '#0284c7',
+    preConfirm: () => {
+      const director_name = (document.getElementById('swalDirectorName')?.value || '').trim();
+      const director_nip = (document.getElementById('swalDirectorNip')?.value || '').trim();
+      const head_simrs_name = (document.getElementById('swalHeadName')?.value || '').trim();
+      const head_simrs_nip = (document.getElementById('swalHeadNip')?.value || '').trim();
+      if (!director_name || !head_simrs_name) {
+        Swal.showValidationMessage('Nama Direktur dan Kepala Instalasi SIMRS & IT wajib diisi');
+        return false;
+      }
+      return { director_name, director_nip, head_simrs_name, head_simrs_nip };
+    }
+  });
+
+  if (result.isConfirmed && result.value) {
+    try {
+      await saveSignersPayload(result.value);
+      Swal.fire({
+        icon: 'success',
+        title: 'Penandatangan Diperbarui!',
+        text: 'Nama Direktur & Kepala Instalasi SIMRS & IT tersimpan ke Supabase dan langsung sinkron ke Web & APK.',
+        timer: 2200,
+        showConfirmButton: false
+      });
+    } catch (err) {
+      Swal.fire('Error', err.message, 'error');
+    }
+  }
+}
+
+async function saveSignersFromGateway() {
+  const director_name = (document.getElementById('cfg_director_name')?.value || '').trim();
+  const director_nip = (document.getElementById('cfg_director_nip')?.value || '').trim();
+  const head_simrs_name = (document.getElementById('cfg_head_simrs_name')?.value || '').trim();
+  const head_simrs_nip = (document.getElementById('cfg_head_simrs_nip')?.value || '').trim();
+
+  if (!director_name || !head_simrs_name) {
+    Swal.fire('Peringatan', 'Nama Direktur dan Kepala Instalasi SIMRS & IT tidak boleh kosong', 'warning');
+    return;
+  }
+
+  try {
+    await saveSignersPayload({ director_name, director_nip, head_simrs_name, head_simrs_nip });
+    Swal.fire({
+      icon: 'success',
+      title: 'Nama Penandatangan Disimpan!',
+      text: 'Perubahan langsung berlaku pada laporan cetak PDF & Excel di Web maupun APK.',
+      timer: 2000,
+      showConfirmButton: false
+    });
+  } catch (err) {
+    Swal.fire('Error', err.message, 'error');
+  }
+}
+
 // Load Gateway & Server Settings
 async function loadGatewaySettings() {
   try {
     const res = await fetch('/api/settings');
     const cfg = await res.json();
+    if (cfg && typeof cfg === 'object') {
+      appSettings = cfg;
+    }
 
     const serverUrlInput = document.getElementById('cfg_app_server_url');
     if (serverUrlInput) {
@@ -2906,6 +3180,8 @@ async function loadGatewaySettings() {
         ? savedOrigin
         : getDefaultPublicOrigin();
     }
+
+    updateSignersPreview();
 
     document.getElementById('cfg_wa_enabled').checked = cfg.wa_gateway_enabled === '1';
     document.getElementById('cfg_wa_provider').value = cfg.wa_gateway_provider || 'fonnte';
@@ -2937,8 +3213,13 @@ function setQuickServerIp() {
 // Save Gateway Settings
 async function saveGatewaySettings() {
   const serverUrlInput = document.getElementById('cfg_app_server_url');
+  const signers = getReportSigners();
   const payload = {
     app_server_url: serverUrlInput ? serverUrlInput.value.trim() : '',
+    director_name: (document.getElementById('cfg_director_name')?.value || '').trim() || signers.directorName,
+    director_nip: document.getElementById('cfg_director_nip') ? document.getElementById('cfg_director_nip').value.trim() : signers.directorNip,
+    head_simrs_name: (document.getElementById('cfg_head_simrs_name')?.value || '').trim() || signers.headName,
+    head_simrs_nip: document.getElementById('cfg_head_simrs_nip') ? document.getElementById('cfg_head_simrs_nip').value.trim() : signers.headNip,
     wa_gateway_enabled: document.getElementById('cfg_wa_enabled').checked ? '1' : '0',
     wa_gateway_provider: document.getElementById('cfg_wa_provider').value,
     wa_api_url: document.getElementById('cfg_wa_url').value,
@@ -2963,6 +3244,8 @@ async function saveGatewaySettings() {
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('Gagal menyimpan pengaturan');
+    appSettings = Object.assign({}, appSettings || {}, payload);
+    updateSignersPreview();
 
     Swal.fire({
       icon: 'success',
@@ -3027,6 +3310,95 @@ async function notifyNativeOrBrowser(t) {
       });
     } else {
       try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) { }
+    }
+  }
+}
+
+/**
+ * Dispatcher notifikasi umum (Disposisi / Selesai / Perubahan Status) ke Android APK & Browser.
+ */
+async function notifyNativeGeneric(title, body, meta = {}) {
+  const notifTitle = String(title || 'Update Tiket SIMRS & IT');
+  const notifBody = String(body || 'Ada pembaruan status tiket.');
+  const ticketId = Number(meta.ticketId || meta.id || (Date.now() % 100000));
+  const assignedTo = Number(meta.assignedTo || 0);
+  const status = String(meta.status || '');
+  const eventType = String(
+    meta.eventType ||
+    (status === 'resolved' || status === 'closed' ? 'resolved' : (assignedTo > 0 ? 'assigned' : 'status'))
+  );
+  const offsetId = ticketId + (eventType === 'resolved' ? 20000 : eventType === 'assigned' ? 30000 : 40000);
+
+  try {
+    const cap = window.Capacitor;
+    if (cap && cap.Plugins && cap.Plugins.EtiketNative) {
+      if (typeof cap.Plugins.EtiketNative.notifyEventNow === 'function') {
+        await cap.Plugins.EtiketNative.notifyEventNow({
+          ticketId,
+          id: ticketId,
+          eventType,
+          status,
+          assignedTo,
+          title: notifTitle,
+          body: notifBody,
+          highPriority: true
+        });
+        return;
+      }
+      if (typeof cap.Plugins.EtiketNative.notifyTicketNow === 'function') {
+        await cap.Plugins.EtiketNative.notifyTicketNow({
+          id: offsetId,
+          ticketNo: meta.ticketNo || '',
+          roomName: notifTitle,
+          title: notifBody,
+          reporterName: meta.assignedToName || 'Tim IT RSUD',
+          priority: 'high'
+        });
+        return;
+      }
+    }
+
+    if (cap && cap.Plugins && cap.Plugins.LocalNotifications) {
+      await cap.Plugins.LocalNotifications.schedule({
+        notifications: [{
+          id: offsetId,
+          title: notifTitle,
+          body: notifBody,
+          channelId: 'etiket_urgent_alerts_v2'
+        }]
+      });
+      return;
+    }
+  } catch (e) {
+    console.warn('Capacitor notifyEvent fallback:', e);
+  }
+
+  if (typeof Notification !== 'undefined') {
+    const triggerBrowserNotif = () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(notifTitle, {
+            body: notifBody,
+            icon: '/icons/icon-192.png',
+            badge: '/icons/icon-192.png',
+            vibrate: [200, 100, 200],
+            tag: `ticket-${eventType}-${ticketId}`,
+            data: { url: '/index.html' }
+          });
+        }).catch(() => {
+          try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) { }
+        });
+      } else {
+        try { new Notification(notifTitle, { body: notifBody, icon: '/icons/icon-192.png' }); } catch (e) { }
+      }
+    };
+
+    if (Notification.permission === 'granted') {
+      triggerBrowserNotif();
+    } else if (Notification.permission === 'default') {
+      Notification.requestPermission().then(perm => {
+        if (perm === 'granted') triggerBrowserNotif();
+      }).catch(() => { });
     }
   }
 }

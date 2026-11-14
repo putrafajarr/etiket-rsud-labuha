@@ -12,8 +12,7 @@ public class BootReceiver extends BroadcastReceiver {
         if (intent != null && Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
             SharedPreferences prefs = context.getSharedPreferences(TicketMonitorService.PREFS_NAME, Context.MODE_PRIVATE);
             boolean enabled = prefs.getBoolean(TicketMonitorService.KEY_MONITOR_ENABLED, true);
-            String serverUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
-            if (enabled && serverUrl != null && !serverUrl.isEmpty()) {
+            if (enabled) {
                 try {
                     Intent svc = new Intent(context, TicketMonitorService.class);
                     svc.setAction(TicketMonitorService.ACTION_START_MONITOR);

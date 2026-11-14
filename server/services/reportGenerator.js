@@ -1,11 +1,38 @@
 const ExcelJS = require('exceljs');
 const { query } = require('../config/db');
 
+function escapeReportHtml(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function getSettingsConfig() {
+  const rows = await query.all('SELECT key, value FROM system_settings');
+  const config = {};
+  (rows || []).forEach((s) => { config[s.key] = s.value; });
+  return config;
+}
+
+function resolveSigners(config = {}) {
+  const directorName = (config.director_name || '').trim() || 'dr. Surahman, Sp.PD';
+  const directorNip = config.director_nip !== undefined ? String(config.director_nip).trim() : 'NIP. 19780512 200604 1 008';
+  const headName = (config.head_simrs_name || '').trim() || 'Fahmi Mansur, S.Kom';
+  const headNip = config.head_simrs_nip !== undefined ? String(config.head_simrs_nip).trim() : 'NIP. 19850914 201001 1 012';
+  return { directorName, directorNip, headName, headNip };
+}
+
 class ReportGenerator {
   /**
    * Generate complete Excel file (.xlsx) with multiple analytical sheets
    */
   static async generateExcel(filter = {}) {
+    const config = await getSettingsConfig();
+    const signers = resolveSigners(config);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'SIM-ETIKET RSUD LABUHA';
     workbook.created = new Date();
@@ -165,6 +192,28 @@ class ReportGenerator {
       });
     });
 
+    const todayStr = new Date().toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+    sheet1.addRow([]);
+    const sigTitleRow = sheet1.addRow([]);
+    sigTitleRow.getCell(3).value = 'Mengetahui, Direktur RSUD Labuha';
+    sigTitleRow.getCell(10).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
+    sigTitleRow.getCell(3).font = { bold: true };
+    sigTitleRow.getCell(10).font = { bold: true };
+    sheet1.addRow([]);
+    sheet1.addRow([]);
+    const sigNameRow = sheet1.addRow([]);
+    sigNameRow.getCell(3).value = signers.directorName;
+    sigNameRow.getCell(10).value = signers.headName;
+    sigNameRow.getCell(3).font = { bold: true, underline: true };
+    sigNameRow.getCell(10).font = { bold: true, underline: true };
+    const sigNipRow = sheet1.addRow([]);
+    sigNipRow.getCell(3).value = signers.directorNip;
+    sigNipRow.getCell(10).value = signers.headNip;
+
     return workbook;
   }
 
@@ -172,9 +221,8 @@ class ReportGenerator {
    * Generate Official HTML Ready for Print / PDF Export
    */
   static async generatePrintableHtml(filter = {}) {
-    const settings = await query.all('SELECT key, value FROM system_settings');
-    const config = {};
-    settings.forEach(s => config[s.key] = s.value);
+    const config = await getSettingsConfig();
+    const signers = resolveSigners(config);
 
     let sql = `
       SELECT t.*, u.name as tech_name
@@ -436,15 +484,15 @@ class ReportGenerator {
           <div class="sig-column">
             <p>Mengetahui,<br><strong>Direktur RSUD Labuha</strong></p>
             <div class="sig-space"></div>
-            <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">dr. Surahman, Sp.PD</p>
-            <p style="margin: 0; font-size: 10pt;">NIP. 19780512 200604 1 008</p>
+            <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">${escapeReportHtml(signers.directorName)}</p>
+            <p style="margin: 0; font-size: 10pt;">${escapeReportHtml(signers.directorNip)}</p>
           </div>
 
           <div class="sig-column">
             <p>Labuha, ${todayStr}<br><strong>Kepala Instalasi SIMRS & IT</strong></p>
             <div class="sig-space"></div>
-            <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">Fahmi Mansur, S.Kom</p>
-            <p style="margin: 0; font-size: 10pt;">NIP. 19850914 201001 1 012</p>
+            <p style="text-decoration: underline; font-weight: bold; margin-bottom: 2px;">${escapeReportHtml(signers.headName)}</p>
+            <p style="margin: 0; font-size: 10pt;">${escapeReportHtml(signers.headNip)}</p>
           </div>
         </div>
       </body>

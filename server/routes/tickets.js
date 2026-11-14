@@ -105,7 +105,14 @@ router.get('/latest-alert', async (req, res) => {
       `, [sinceId]);
     }
 
-    res.json({ latestId, openCount, newTickets });
+    const recentTickets = await query.all(`
+      SELECT id, ticket_no, room_name, category_name, reporter_name, reporter_phone, title, priority, status, assigned_to, assigned_to_name, updated_at, created_at
+      FROM tickets
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 30
+    `);
+
+    res.json({ latestId, openCount, newTickets, recentTickets });
   } catch (err) {
     console.error('Latest alert error:', err);
     res.status(500).json({ error: 'Gagal memeriksa alert tiket' });

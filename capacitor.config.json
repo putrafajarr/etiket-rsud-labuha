@@ -4,6 +4,7 @@
   "webDir": "public",
   "bundledWebRuntime": false,
   "server": {
+    "url": "https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev",
     "androidScheme": "https",
     "cleartext": true
   },

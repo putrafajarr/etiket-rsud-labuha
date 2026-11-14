@@ -22,10 +22,12 @@ import java.net.URL;
 
 public class MainActivity extends BridgeActivity {
 
+    public static final String DEFAULT_CLOUD_WEB_URL = "https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev";
     private static final int REQ_NOTIF_PERM = 1001;
     private static final String KEY_CONFIG_VERSION = "config_version";
-    private static final int TARGET_CONFIG_VERSION = 4;
+    private static final int TARGET_CONFIG_VERSION = 5;
 
+    private static volatile boolean sessionOfflineFallback = false;
     private volatile boolean isCheckingFallback = false;
     private volatile boolean dialogShownThisSession = false;
     private volatile boolean pendingCacheClearOnLoad = false;
@@ -41,11 +43,10 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean isLegacyOrBundledUrl(String url) {
-        if (url == null || url.trim().isEmpty()) return true;
+        if (url == null || url.trim().isEmpty()) return false;
         String lower = url.trim().toLowerCase();
         return lower.contains("192.168.")
             || lower.contains("trycloudflare.com")
-            || lower.contains("workers.dev")
             || lower.contains("://localhost")
             || lower.contains("://127.0.0.1");
     }
@@ -56,11 +57,9 @@ public class MainActivity extends BridgeActivity {
         int configVersion = prefs.getInt(KEY_CONFIG_VERSION, 0);
         String savedUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
 
-        // Migrate upgrades away from stale LAN/tunnel URLs to reliable bundled Capacitor + Supabase Cloud mode
-        if (configVersion < TARGET_CONFIG_VERSION || isLegacyOrBundledUrl(savedUrl)) {
-            if (isLegacyOrBundledUrl(savedUrl)) {
-                savedUrl = "";
-            }
+        // Default to live workers.dev URL so web updates reflect automatically in the APK
+        if (configVersion < TARGET_CONFIG_VERSION || savedUrl == null || savedUrl.trim().isEmpty() || isLegacyOrBundledUrl(savedUrl)) {
+            savedUrl = DEFAULT_CLOUD_WEB_URL;
             prefs.edit()
                 .putString(TicketMonitorService.KEY_SERVER_URL, savedUrl)
                 .putInt(KEY_CONFIG_VERSION, TARGET_CONFIG_VERSION)
@@ -70,7 +69,7 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        final String customServerUrl = savedUrl != null ? savedUrl.trim() : "";
+        final String customServerUrl = sessionOfflineFallback ? "" : savedUrl.trim();
 
         if (!customServerUrl.isEmpty()) {
             this.config = new CapConfig.Builder(this)
@@ -81,8 +80,13 @@ public class MainActivity extends BridgeActivity {
                 .setAndroidScheme("https")
                 .create();
         } else {
-            // Serve bundled local web assets over https://localhost and connect directly to Supabase Cloud
-            this.config = CapConfig.loadDefault(this);
+            // Temporary offline fallback: serve bundled local web assets over https://localhost
+            this.config = new CapConfig.Builder(this)
+                .setAllowMixedContent(true)
+                .setCaptureInput(true)
+                .setWebContentsDebuggingEnabled(true)
+                .setAndroidScheme("https")
+                .create();
         }
 
         bridgeBuilder.addWebViewListener(new WebViewListener() {
@@ -152,13 +156,13 @@ public class MainActivity extends BridgeActivity {
         new Thread(() -> {
             try {
                 SharedPreferences prefs = getSharedPreferences(TicketMonitorService.PREFS_NAME, MODE_PRIVATE);
-                String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
-                if (currentUrl == null || currentUrl.trim().isEmpty() || isServerReachable(currentUrl)) {
+                String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, DEFAULT_CLOUD_WEB_URL);
+                if (currentUrl == null || currentUrl.trim().isEmpty() || sessionOfflineFallback || isServerReachable(currentUrl)) {
                     return;
                 }
 
-                // Custom LAN server unreachable: recover immediately to built-in Cloud mode instead of showing white screen
-                prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, "").apply();
+                // Temporary offline fallback in memory only; keep saved live URL for next launch
+                sessionOfflineFallback = true;
                 dialogShownThisSession = true;
                 runOnUiThread(this::recreate);
             } finally {
@@ -189,30 +193,36 @@ public class MainActivity extends BridgeActivity {
     public void showServerUrlDialog() {
         runOnUiThread(() -> {
             SharedPreferences prefs = getSharedPreferences(TicketMonitorService.PREFS_NAME, MODE_PRIVATE);
-            String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
+            String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, DEFAULT_CLOUD_WEB_URL);
 
             final EditText input = new EditText(this);
             input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-            input.setHint("Kosongkan untuk Mode Cloud Supabase Langsung");
+            input.setHint(DEFAULT_CLOUD_WEB_URL);
             input.setText(currentUrl);
             int pad = (int) (16 * getResources().getDisplayMetrics().density);
             input.setPadding(pad, pad, pad, pad);
 
             new AlertDialog.Builder(this)
                 .setTitle("Pengaturan Mode Server APK")
-                .setMessage("Biarkan kosong untuk Mode Cloud Bawaan (langsung Supabase), atau isi URL server lokal RSUD:")
+                .setMessage("Default menunjuk ke Cloud Live (workers.dev) agar aplikasi auto-update, atau masukkan URL server lokal RSUD:")
                 .setView(input)
                 .setPositiveButton("Simpan & Terapkan", (dialog, which) -> {
                     String nextUrl = input.getText().toString().trim();
-                    if (!nextUrl.isEmpty() && !nextUrl.startsWith("http://") && !nextUrl.startsWith("https://")) {
-                        nextUrl = "http://" + nextUrl;
+                    if (nextUrl.isEmpty()) {
+                        nextUrl = DEFAULT_CLOUD_WEB_URL;
+                    } else if (!nextUrl.startsWith("http://") && !nextUrl.startsWith("https://")) {
+                        nextUrl = "https://" + nextUrl;
                     }
+                    sessionOfflineFallback = false;
+                    pendingCacheClearOnLoad = true;
                     prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, nextUrl).apply();
                     startBackgroundMonitorIfEnabled();
                     recreate();
                 })
-                .setNeutralButton("Reset ke Mode Cloud", (dialog, which) -> {
-                    prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, "").apply();
+                .setNeutralButton("Reset ke Live Cloud", (dialog, which) -> {
+                    sessionOfflineFallback = false;
+                    pendingCacheClearOnLoad = true;
+                    prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, DEFAULT_CLOUD_WEB_URL).apply();
                     startBackgroundMonitorIfEnabled();
                     recreate();
                 })

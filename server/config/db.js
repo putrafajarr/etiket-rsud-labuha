@@ -71,7 +71,8 @@ if (isSupabaseHttp) {
     run: async (sql, params = []) => {
       let finalSql = interpolateSql(sql, params);
       const isInsert = /^\s*insert\s+/i.test(finalSql);
-      if (isInsert && !/returning\s+/i.test(finalSql)) {
+      const isNoIdTableInsert = /^\s*insert\s+into\s+(?:public\.)?system_settings\b/i.test(finalSql);
+      if (isInsert && !isNoIdTableInsert && !/returning\s+/i.test(finalSql)) {
         finalSql = `${finalSql} RETURNING id`;
       }
       const res = await callExecSql(finalSql);
