@@ -255,9 +255,15 @@ async function handleLogin(e) {
         if (rows && rows.length > 0) {
           const u = rows[0];
           let matched = false;
-          if (window.bcrypt && typeof window.bcrypt.compareSync === 'function') {
-            matched = window.bcrypt.compareSync(password, u.password_hash);
-          } else if (u.password_hash === password) {
+          const bcryptLib = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
+          if (bcryptLib && typeof bcryptLib.compareSync === 'function') {
+            try {
+              matched = bcryptLib.compareSync(password, u.password_hash);
+            } catch (bErr) {
+              console.warn('[Login] Bcrypt compare error:', bErr);
+            }
+          }
+          if (!matched && u.password_hash === password) {
             matched = true;
           }
 
