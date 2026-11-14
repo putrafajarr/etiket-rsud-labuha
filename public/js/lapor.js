@@ -177,6 +177,41 @@ function resetRoomSelection() {
   document.getElementById('room_id').value = '';
 }
 
+// Helper to compress uploaded photo to a lightweight Base64 Data URL (stored directly in Supabase)
+async function compressImageToDataUrl(file) {
+  if (!file || !file.type || !file.type.startsWith('image/')) return null;
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDim = 850;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = () => resolve(null);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+}
+
 // Preview image selected by user
 function previewImage(input) {
   if (input.files && input.files[0]) {
@@ -239,6 +274,17 @@ function setupForm() {
         const randomNum = Math.floor(1000 + Math.random() * 9000);
         const generatedTicketNo = `TKT-${todayStr}-${randomNum}`;
 
+        // Compress and encode photo if attached
+        let photoDataUrl = null;
+        const photoEl = document.getElementById('photoInput');
+        if (photoEl && photoEl.files && photoEl.files[0]) {
+          try {
+            photoDataUrl = await compressImageToDataUrl(photoEl.files[0]);
+          } catch (e) {
+            console.warn('[Lapor] Compress photo error:', e);
+          }
+        }
+
         const payload = {
           ticket_no: generatedTicketNo,
           room_id: roomId,
@@ -250,6 +296,7 @@ function setupForm() {
           reporter_email: document.getElementById('reporter_email').value.trim() || null,
           title: document.getElementById('title').value.trim(),
           description: document.getElementById('description').value.trim(),
+          photo_url: photoDataUrl,
           priority: matchedCat && matchedCat.default_priority ? matchedCat.default_priority : 'medium',
           status: 'open',
           channel: 'web_qr'

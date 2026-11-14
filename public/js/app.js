@@ -481,29 +481,52 @@ async function smartFetch(url, options = {}) {
       };
 
       try {
-        let patchBody = {};
+        let rawBody = {};
         if (typeof options.body === 'string') {
-          patchBody = JSON.parse(options.body);
-        } else if (typeof options.body === 'object') {
-          patchBody = options.body;
+          try { rawBody = JSON.parse(options.body); } catch (e) { rawBody = {}; }
+        } else if (typeof options.body === 'object' && options.body !== null) {
+          rawBody = options.body;
         }
 
-        if (patchBody.status === 'in_progress') {
-          patchBody.actual_response_time = new Date().toISOString();
-        } else if (patchBody.status === 'resolved' || patchBody.status === 'closed') {
-          patchBody.resolved_at = new Date().toISOString();
+        let patchData = {};
+        if (url.includes('/assign')) {
+          const techId = parseInt(rawBody.technician_id || rawBody.assigned_to);
+          const matchedTech = (techniciansData || []).find(t => t.id === techId);
+          const techName = matchedTech ? matchedTech.name : (rawBody.assigned_by_name || 'Teknisi IT');
+          patchData = {
+            assigned_to: techId,
+            assigned_to_name: techName,
+            assigned_at: new Date().toISOString(),
+            status: 'in_progress',
+            actual_response_time: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        } else if (url.includes('/status')) {
+          patchData = {
+            status: rawBody.status,
+            updated_at: new Date().toISOString()
+          };
+          if (rawBody.status === 'in_progress') {
+            patchData.actual_response_time = new Date().toISOString();
+          } else if (rawBody.status === 'resolved' || rawBody.status === 'closed') {
+            patchData.resolved_at = new Date().toISOString();
+            if (rawBody.resolution_notes) patchData.resolution_notes = rawBody.resolution_notes;
+          }
+          if (rawBody.pending_reason) patchData.pending_reason = rawBody.pending_reason;
+        } else {
+          patchData = rawBody;
         }
 
         const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/tickets?id=eq.${tId}`, {
           method: 'PATCH',
           headers: supaHeaders,
-          body: JSON.stringify(patchBody)
+          body: JSON.stringify(patchData)
         });
 
         if (supaRes.ok) {
           const updatedRows = await supaRes.json();
           const ticket = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
-          return new Response(JSON.stringify({ success: true, ticket }), {
+          return new Response(JSON.stringify({ success: true, ticket: ticket || patchData }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
