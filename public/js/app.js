@@ -18,14 +18,27 @@ let filterTimeout = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   initMobileNativeBridge();
-  initSocket();
   await checkAuthSession();
   await loadRoomsMaster();
   await loadTechnicians();
   await loadTickets();
   await loadStats();
+  initSocket();
   startAutoSync();
   lucide.createIcons();
+
+  // Keep internal page links inside Capacitor APK WebView so they never open external broken localhost tabs
+  if (window.Capacitor) {
+    document.addEventListener('click', (ev) => {
+      const anchor = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (href.startsWith('/') && !href.endsWith('.apk') && anchor.target === '_blank') {
+        ev.preventDefault();
+        window.location.href = href;
+      }
+    });
+  }
 
   // Unlock AudioContext and request notification permission on first user click
   document.addEventListener('click', () => {
@@ -596,7 +609,7 @@ async function runRealtimeSyncCycle() {
             const curVal = filterSelect.value;
             filterSelect.innerHTML = '<option value="">Semua Ruangan RSUD</option>';
             allRooms.forEach(r => {
-              filterSelect.innerHTML += `<option value="${r.id}" ${r.id == curVal ? 'selected' : ''}>${r.name}</option>`;
+              filterSelect.innerHTML += `<option value="${r.id}" ${r.id == curVal ? 'selected' : ''}>${esc(r.name)}</option>`;
             });
           }
           if (currentTab === 'rooms') loadRoomsMaster();
@@ -640,7 +653,7 @@ async function runRealtimeSyncCycle() {
             allTechnicians.forEach(t => {
               const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
               const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
-              select.innerHTML += `<option value="${t.id}" ${t.id == curVal ? 'selected' : ''}>${t.name} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
+              select.innerHTML += `<option value="${t.id}" ${t.id == curVal ? 'selected' : ''}>${esc(t.name)} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
             });
           }
           if (currentTab === 'users') loadUsers();
@@ -1687,7 +1700,7 @@ async function loadTechnicians() {
       allTechnicians.forEach(t => {
         const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
         const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
-        select.innerHTML += `<option value="${t.id}">${t.name} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
+        select.innerHTML += `<option value="${t.id}">${esc(t.name)} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
       });
     }
 
@@ -1836,6 +1849,9 @@ async function openTicketModal(ticketId) {
   try {
     const res = await fetch(`/api/tickets/${ticketId}`);
     const data = await res.json();
+    if (!res.ok || !data || !data.ticket) {
+      throw new Error((data && data.error) || 'Data tiket tidak ditemukan');
+    }
     selectedTicketForModal = data.ticket;
 
     // Strict Lock Permission Checks
@@ -2727,7 +2743,7 @@ async function exportExcel() {
 
   try {
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.0');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.1');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
@@ -2776,17 +2792,31 @@ async function exportExcel() {
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const blobUrl = URL.createObjectURL(blob);
     const filename = `Rekap-ETiket-RSUD-Labuha-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    if (window.Capacitor?.Plugins?.EtiketNative?.exportBase64File) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      await window.Capacitor.Plugins.EtiketNative.exportBase64File({
+        filename,
+        mimeType,
+        base64: btoa(binary)
+      });
+    } else {
+      const blob = new Blob([buffer], { type: mimeType });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+    }
 
     Swal.fire({
       icon: 'success',
@@ -2840,6 +2870,15 @@ function closeReportPrintModal() {
 
 function printReportIframe() {
   const frame = document.getElementById('reportPrintFrame');
+  if (window.Capacitor?.Plugins?.EtiketNative?.printHtml && frame && frame.srcdoc) {
+    window.Capacitor.Plugins.EtiketNative.printHtml({
+      title: 'Laporan Rekapitulasi E-Tiket IT RSUD Labuha',
+      html: frame.srcdoc
+    }).catch(err => {
+      Swal.fire('Info Cetak', err.message || 'Gagal membuka dialog cetak Android', 'info');
+    });
+    return;
+  }
   if (frame && frame.contentWindow) {
     frame.contentWindow.focus();
     frame.contentWindow.print();

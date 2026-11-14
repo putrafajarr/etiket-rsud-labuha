@@ -6,9 +6,16 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.Settings;
+import android.util.Base64;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -17,6 +24,8 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.io.File;
+import java.io.FileOutputStream;
 
 @CapacitorPlugin(
     name = "EtiketNative",
@@ -187,6 +196,81 @@ public class EtiketNativePlugin extends Plugin {
             ((MainActivity) getActivity()).showServerUrlDialog();
         }
         call.resolve();
+    }
+
+    @PluginMethod
+    public void exportBase64File(PluginCall call) {
+        String rawName = call.getString("filename", "export.xlsx");
+        String safeName = new File(rawName != null ? rawName : "export.xlsx").getName();
+        String base64 = call.getString("base64", "");
+        String mimeType = call.getString("mimeType", "application/octet-stream");
+        if (base64 == null || base64.isEmpty()) {
+            call.reject("Data file kosong");
+            return;
+        }
+        try {
+            byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+            File outFile = new File(getContext().getCacheDir(), safeName);
+            try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                fos.write(bytes);
+                fos.flush();
+            }
+            Uri uri = FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                outFile
+            );
+            getActivity().runOnUiThread(() -> {
+                Intent viewIntent = new Intent(Intent.ACTION_VIEW);
+                viewIntent.setDataAndType(uri, mimeType);
+                viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.setType(mimeType);
+                shareIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                Intent chooser = Intent.createChooser(shareIntent, "Simpan atau Bagikan " + safeName);
+                chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] { viewIntent });
+                getActivity().startActivity(chooser);
+            });
+            JSObject ret = new JSObject();
+            ret.put("ok", true);
+            ret.put("filename", safeName);
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Gagal mengekspor file: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void printHtml(PluginCall call) {
+        String html = call.getString("html", "");
+        String title = call.getString("title", "Dokumen SIM-ETIKET RSUD Labuha");
+        if (html == null || html.trim().isEmpty()) {
+            call.reject("Konten cetak kosong");
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            try {
+                WebView printWebView = new WebView(getActivity());
+                printWebView.getSettings().setJavaScriptEnabled(false);
+                printWebView.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public void onPageFinished(WebView view, String url) {
+                        PrintManager pm = (PrintManager) getActivity().getSystemService(Context.PRINT_SERVICE);
+                        if (pm != null) {
+                            PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(title);
+                            pm.print(title, adapter, new PrintAttributes.Builder().build());
+                        }
+                    }
+                });
+                printWebView.loadDataWithBaseURL("https://localhost/", html, "text/html", "UTF-8", null);
+                call.resolve();
+            } catch (Exception e) {
+                call.reject("Gagal membuka pencetakan: " + e.getMessage());
+            }
+        });
     }
 
     private void startOrStopMonitorService(boolean enable) {

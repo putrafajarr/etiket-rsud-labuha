@@ -24,7 +24,7 @@ public class MainActivity extends BridgeActivity {
 
     private static final int REQ_NOTIF_PERM = 1001;
     private static final String KEY_CONFIG_VERSION = "config_version";
-    private static final int TARGET_CONFIG_VERSION = 3;
+    private static final int TARGET_CONFIG_VERSION = 4;
 
     private volatile boolean isCheckingFallback = false;
     private volatile boolean dialogShownThisSession = false;

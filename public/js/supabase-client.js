@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.0');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.1');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.0').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.1').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -382,15 +382,18 @@
 
   async function handleAuthLogin(options) {
     const { fields } = await parseRequestBody(options);
-    const username = (fields.username || '').trim();
+    const rawUsername = (fields.username || '').trim();
     const password = fields.password || '';
 
-    if (!username || !password) {
+    if (!rawUsername || !password) {
       return jsonResponse({ error: 'Username dan password wajib diisi' }, 400);
     }
 
+    const lower = rawUsername.toLowerCase();
+    const lookupUsername = (lower === 'purafajar' || lower === 'putrafajar') ? 'fajar' : rawUsername;
+
     const rows = await supabaseRequest(
-      `/users?or=(username.ilike.${encodeURIComponent(username)},email.ilike.${encodeURIComponent(username)})&is_active=neq.0`
+      `/users?or=(username.ilike.${encodeURIComponent(lookupUsername)},email.ilike.${encodeURIComponent(rawUsername)})&is_active=neq.0`
     );
 
     if (!rows || rows.length === 0) {
@@ -1259,6 +1262,8 @@
     return null;
   }
 
+  let verifiedLocalExpress = false;
+
   async function smartFetch(url, options = {}) {
     const apiPath = extractApiPath(url);
     if (!apiPath) {
@@ -1276,6 +1281,7 @@
         clearTimeout(timeout);
         const contentType = res.headers.get('content-type') || '';
         if (res.ok && (contentType.includes('application/json') || apiPath.includes('/export-excel') || apiPath.includes('/print-html'))) {
+          verifiedLocalExpress = true;
           return res;
         }
       } catch (err) {
@@ -1295,7 +1301,7 @@
   global.generateQrDataUrl = generateQrDataUrl;
   global.ensureScriptLoaded = ensureScriptLoaded;
   global.smartFetch = smartFetch;
-  global.isLocalBackendHost = () => isUsableLocalBackend() !== null;
+  global.isLocalBackendHost = () => isUsableLocalBackend() !== null && verifiedLocalExpress;
   global.handleSupabaseApi = handleSupabaseApi;
 
   global.fetch = function (input, options) {

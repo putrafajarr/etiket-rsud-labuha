@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Cetak Stiker QR Code Ruangan - RSUD LABUHA</title>
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
@@ -30,7 +31,7 @@
         <a href="/" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
           ← Kembali ke Dashboard
         </a>
-        <button onclick="window.print()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-sky-600/20">
+        <button onclick="printStickerSheet()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-sky-600/20">
           <i data-lucide="printer" class="w-4 h-4"></i>
           <span>Cetak Semua Stiker (Print / PDF)</span>
         </button>
@@ -61,9 +62,20 @@
     <!-- QR Sticker Cards injected dynamically -->
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.0"></script>
-  <script src="/js/supabase-client.js?v=4.0"></script>
+  <script src="/js/qrcode.min.js?v=4.1"></script>
+  <script src="/js/supabase-client.js?v=4.1"></script>
   <script>
+    function printStickerSheet() {
+      if (window.Capacitor?.Plugins?.EtiketNative?.printHtml) {
+        window.Capacitor.Plugins.EtiketNative.printHtml({
+          title: 'Stiker QR Code Ruangan RSUD Labuha',
+          html: '<!DOCTYPE html>' + document.documentElement.outerHTML
+        }).catch(() => window.print());
+        return;
+      }
+      window.print();
+    }
+
     async function loadQRCodes() {
       const grid = document.getElementById('stickerGrid');
       const loading = document.getElementById('loading');
