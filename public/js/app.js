@@ -318,19 +318,23 @@ async function smartFetch(url, options = {}) {
     targetUrl = customBase.replace(/\/+$/, '') + url;
   }
 
-  // 1. Try primary backend endpoint first
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
-    const fetchOptions = { ...options, signal: controller.signal };
-    const res = await window._originalFetch(targetUrl, fetchOptions);
-    clearTimeout(timeout);
-    if (res.ok) return res;
-  } catch (err) {
-    console.debug(`[SmartFetch] Backend ${targetUrl} unreachable, falling back to Supabase Cloud...`);
+  const isLocalServer = customBase || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  // 1. Jika terhubung ke server lokal LAN (IP RSUD): Coba backend lokal terlebih dahulu
+  if (isLocalServer) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+      const fetchOptions = { ...options, signal: controller.signal };
+      const res = await window._originalFetch(targetUrl, fetchOptions);
+      clearTimeout(timeout);
+      if (res.ok) return res;
+    } catch (err) {
+      console.debug(`[SmartFetch] Local backend ${targetUrl} unreachable, falling back to Supabase Cloud...`);
+    }
   }
 
-  // 2. Direct Supabase Cloud REST fallback for GET operations
+  // 2. Di Cloud (Netlify/Vercel/PWA): Langsung ambil dari Supabase REST (0 kuota Serverless Function!)
   if (!options.method || options.method === 'GET') {
     const supaHeaders = {
       'apikey': SUPABASE_ANON_KEY,
@@ -382,6 +386,10 @@ async function smartFetch(url, options = {}) {
       console.warn('[SmartFetch] Direct Supabase fallback error:', supaErr);
     }
   }
+
+  // 3. Fallback terakhir jika bukan GET atau server lokal
+  return window._originalFetch(targetUrl, options);
+}
 
   return window._originalFetch(targetUrl, options);
 }
@@ -709,8 +717,21 @@ async function runRealtimeSyncCycle() {
 
 function startAutoSync() {
   if (autoSyncTimer) clearInterval(autoSyncTimer);
-  // Interval 2 detik untuk sinkronisasi live
-  autoSyncTimer = setInterval(runRealtimeSyncCycle, 2000);
+  // Interval cerdas: 5 detik dan HANYA berjalan jika aplikasi / layar sedang aktif dilihat!
+  autoSyncTimer = setInterval(() => {
+    if (document.hidden) return; // Menghemat kuota saat HP terkunci atau tab diminimalkan
+    runRealtimeSyncCycle();
+  }, 5000);
+}
+
+// Saat user kembali membuka tab / menghidupkan layar HP, lakukan sinkronisasi instan seketika!
+if (!window._visibilityListenerAttached) {
+  window._visibilityListenerAttached = true;
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      runRealtimeSyncCycle();
+    }
+  });
 }
 
 // 1-Click Instant Manual Sync Button on Header
