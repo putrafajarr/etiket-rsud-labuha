@@ -24,6 +24,10 @@ local.properties
 server/uploads/*
 !server/uploads/.gitkeep
 
+# Local Binaries
+bin/
+*.exe
+
 # IDE / Editor
 .vscode/
 .idea/
