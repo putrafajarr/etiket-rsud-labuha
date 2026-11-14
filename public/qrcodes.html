@@ -37,15 +37,15 @@
       </div>
     </div>
 
-    <!-- IP Server / Host Settings Bar -->
+    <!-- Domain / Alamat Server Host Settings Bar -->
     <div class="p-3 bg-sky-50 border border-sky-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="font-bold text-sky-900">🌐 Alamat Server di Barcode:</span>
-        <input type="text" id="customHostInput" placeholder="Memuat IP Wi-Fi..." class="px-3 py-1.5 bg-white border border-sky-300 rounded-lg font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500 text-xs w-56">
+        <span class="font-bold text-sky-900">🌐 Domain / Alamat Server QR:</span>
+        <input type="text" id="customHostInput" placeholder="Memuat domain server..." class="px-3 py-1.5 bg-white border border-sky-300 rounded-lg font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500 text-xs w-64">
         <button onclick="loadQRCodes()" class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-lg transition text-xs shadow-sm">Perbarui QR</button>
       </div>
       <div class="text-[11px] text-sky-800 font-medium">
-        ✓ Menggunakan IP Wi-Fi agar HP bisa langsung scan & lapor.
+        ✓ Menggunakan domain cloud/server aktif agar HP bisa langsung scan &amp; lapor.
       </div>
     </div>
   </div>
@@ -61,6 +61,8 @@
     <!-- QR Sticker Cards injected dynamically -->
   </div>
 
+  <script src="/js/qrcode.min.js?v=4.0"></script>
+  <script src="/js/supabase-client.js?v=4.0"></script>
   <script>
     async function loadQRCodes() {
       const grid = document.getElementById('stickerGrid');
@@ -76,10 +78,11 @@
 
       try {
         const res = await fetch(url);
+        if (!res.ok) throw new Error('Gagal membuat QR Code ruangan');
         const rooms = await res.json();
+        const esc = typeof window.escapeHtml === 'function' ? window.escapeHtml : (v => String(v || ''));
 
         if (rooms.length > 0 && !customHost) {
-          // Extract host from first room reportUrl
           try {
             const parsed = new URL(rooms[0].reportUrl);
             document.getElementById('customHostInput').value = parsed.host;
@@ -87,6 +90,9 @@
         }
 
         grid.innerHTML = '';
+        if (!rooms || rooms.length === 0) {
+          grid.innerHTML = '<div class="col-span-full text-center py-12 text-xs text-slate-500 font-semibold">Belum ada data ruangan aktif di Supabase.</div>';
+        }
         rooms.forEach(r => {
           const card = document.createElement('div');
           card.className = 'sticker-card bg-white border-2 border-slate-800 rounded-2xl p-4 text-center flex flex-col items-center justify-between shadow-sm relative overflow-hidden';
@@ -97,19 +103,19 @@
             </div>
 
             <div class="my-1">
-              <img src="${r.qrDataUrl}" alt="${r.code}" class="w-40 h-40 mx-auto rounded-lg">
+              <img src="${r.qrDataUrl}" alt="${esc(r.code)}" class="w-40 h-40 mx-auto rounded-lg">
             </div>
 
             <div class="w-full mt-2 pt-2 border-t border-slate-200">
-              <h3 class="font-black text-slate-900 text-sm leading-tight uppercase">${r.name}</h3>
-              <p class="text-[10px] font-mono text-slate-500 font-bold mt-0.5">${r.code} • ${r.building || 'Gedung RSUD'}</p>
+              <h3 class="font-black text-slate-900 text-sm leading-tight uppercase">${esc(r.name)}</h3>
+              <p class="text-[10px] font-mono text-slate-500 font-bold mt-0.5">${esc(r.code)} • ${esc(r.building || 'Gedung RSUD')}</p>
             </div>
 
             <div class="w-full bg-slate-900 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg mt-2 tracking-wide uppercase">
               📲 SCAN DENGAN HP UNTUK LAPOR
             </div>
             <div class="text-[9px] font-mono text-slate-400 mt-1 truncate max-w-full">
-              ${r.reportUrl}
+              ${esc(r.reportUrl)}
             </div>
           `;
           grid.appendChild(card);
@@ -120,6 +126,7 @@
         lucide.createIcons();
       } catch (err) {
         console.error('Failed to load room QR codes:', err);
+        loading.innerHTML = `<p class="text-xs font-bold text-rose-600">${err.message}</p>`;
       }
     }
 

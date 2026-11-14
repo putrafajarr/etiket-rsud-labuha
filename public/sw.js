@@ -1,11 +1,17 @@
-const CACHE_NAME = 'etiket-rsud-labuha-v1';
+const CACHE_NAME = 'etiket-rsud-labuha-v4';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/lapor.html',
   '/track.html',
-  '/css/custom.css',
-  '/js/sound.js',
+  '/qrcodes.html',
+  '/css/custom.css?v=4.0',
+  '/js/supabase-client.js?v=4.0',
+  '/js/qrcode.min.js?v=4.0',
+  '/js/bcrypt.min.js?v=4.0',
+  '/js/sound.js?v=4.0',
+  '/js/app.js?v=4.0',
+  '/js/lapor.js?v=4.0',
   '/manifest.json'
 ];
 
@@ -32,9 +38,15 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Network first, fallback to cache for pages
-  if (e.request.url.includes('/api/') || e.request.url.includes('/socket.io/')) {
-    return; // Pass through network
+  const reqUrl = e.request.url || '';
+  if (
+    e.request.method !== 'GET' ||
+    reqUrl.includes('/api/') ||
+    reqUrl.includes('/socket.io/') ||
+    reqUrl.includes('/downloads/') ||
+    reqUrl.includes('supabase.co')
+  ) {
+    return;
   }
 
   e.respondWith(

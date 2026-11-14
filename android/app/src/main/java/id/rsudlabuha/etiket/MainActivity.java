@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.EditText;
 import androidx.annotation.NonNull;
@@ -18,19 +19,16 @@ import com.getcapacitor.CapConfig;
 import com.getcapacitor.WebViewListener;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.List;
 
 public class MainActivity extends BridgeActivity {
 
     private static final int REQ_NOTIF_PERM = 1001;
-    private static final String[] KNOWN_FALLBACK_URLS = new String[] {
-        "http://192.168.0.235:3000",
-        "http://192.168.1.9:3000"
-    };
+    private static final String KEY_CONFIG_VERSION = "config_version";
+    private static final int TARGET_CONFIG_VERSION = 3;
 
     private volatile boolean isCheckingFallback = false;
     private volatile boolean dialogShownThisSession = false;
+    private volatile boolean pendingCacheClearOnLoad = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,47 +40,72 @@ public class MainActivity extends BridgeActivity {
         startBackgroundMonitorIfEnabled();
     }
 
+    private boolean isLegacyOrBundledUrl(String url) {
+        if (url == null || url.trim().isEmpty()) return true;
+        String lower = url.trim().toLowerCase();
+        return lower.contains("192.168.")
+            || lower.contains("trycloudflare.com")
+            || lower.contains("workers.dev")
+            || lower.contains("://localhost")
+            || lower.contains("://127.0.0.1");
+    }
+
     @Override
     protected void load() {
-        CapConfig defaultConfig = CapConfig.loadDefault(this);
         SharedPreferences prefs = getSharedPreferences(TicketMonitorService.PREFS_NAME, MODE_PRIVATE);
-        String savedUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, null);
-        String activeUrl = (savedUrl != null && !savedUrl.trim().isEmpty())
-            ? savedUrl.trim()
-            : defaultConfig.getServerUrl();
+        int configVersion = prefs.getInt(KEY_CONFIG_VERSION, 0);
+        String savedUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
 
-        if (activeUrl != null && !activeUrl.isEmpty() && (savedUrl == null || savedUrl.trim().isEmpty())) {
-            prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, activeUrl).apply();
+        // Migrate upgrades away from stale LAN/tunnel URLs to reliable bundled Capacitor + Supabase Cloud mode
+        if (configVersion < TARGET_CONFIG_VERSION || isLegacyOrBundledUrl(savedUrl)) {
+            if (isLegacyOrBundledUrl(savedUrl)) {
+                savedUrl = "";
+            }
+            prefs.edit()
+                .putString(TicketMonitorService.KEY_SERVER_URL, savedUrl)
+                .putInt(KEY_CONFIG_VERSION, TARGET_CONFIG_VERSION)
+                .apply();
+            if (configVersion < TARGET_CONFIG_VERSION) {
+                pendingCacheClearOnLoad = true;
+            }
         }
 
-        this.config = new CapConfig.Builder(this)
-            .setServerUrl(activeUrl)
-            .setAllowMixedContent(true)
-            .setCaptureInput(true)
-            .setWebContentsDebuggingEnabled(true)
-            .setAndroidScheme("http")
-            .create();
+        final String customServerUrl = savedUrl != null ? savedUrl.trim() : "";
+
+        if (!customServerUrl.isEmpty()) {
+            this.config = new CapConfig.Builder(this)
+                .setServerUrl(customServerUrl)
+                .setAllowMixedContent(true)
+                .setCaptureInput(true)
+                .setWebContentsDebuggingEnabled(true)
+                .setAndroidScheme("https")
+                .create();
+        } else {
+            // Serve bundled local web assets over https://localhost and connect directly to Supabase Cloud
+            this.config = CapConfig.loadDefault(this);
+        }
 
         bridgeBuilder.addWebViewListener(new WebViewListener() {
             @Override
             public void onPageStarted(WebView webView) {
                 if (webView != null && webView.getSettings() != null) {
-                    webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
-                    webView.getSettings().setDomStorageEnabled(true);
-                }
-            }
-
-            @Override
-            public void onPageLoaded(WebView webView) {
-                // Clear cache so APK always uses newest HTML/JS without stale cache
-                if (webView != null) {
-                    webView.clearCache(true);
+                    WebSettings settings = webView.getSettings();
+                    settings.setJavaScriptEnabled(true);
+                    settings.setDomStorageEnabled(true);
+                    settings.setDatabaseEnabled(true);
+                    settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+                    if (pendingCacheClearOnLoad) {
+                        webView.clearCache(true);
+                        pendingCacheClearOnLoad = false;
+                    }
                 }
             }
 
             @Override
             public void onReceivedError(WebView webView) {
-                checkServerConnectivityAndRecover();
+                if (!customServerUrl.isEmpty()) {
+                    checkServerConnectivityAndRecover();
+                }
             }
         });
 
@@ -130,24 +153,14 @@ public class MainActivity extends BridgeActivity {
             try {
                 SharedPreferences prefs = getSharedPreferences(TicketMonitorService.PREFS_NAME, MODE_PRIVATE);
                 String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
-                if (isServerReachable(currentUrl)) {
-                    // Server is alive; error was only a missing external CDN script on offline LAN
+                if (currentUrl == null || currentUrl.trim().isEmpty() || isServerReachable(currentUrl)) {
                     return;
                 }
 
-                // Try fallback local IPs
-                List<String> candidates = Arrays.asList(KNOWN_FALLBACK_URLS);
-                for (String candidate : candidates) {
-                    if (!candidate.equals(currentUrl) && isServerReachable(candidate)) {
-                        prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, candidate).apply();
-                        runOnUiThread(() -> recreate());
-                        return;
-                    }
-                }
-
-                // None reachable: offer quick Server IP/Domain dialog
+                // Custom LAN server unreachable: recover immediately to built-in Cloud mode instead of showing white screen
+                prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, "").apply();
                 dialogShownThisSession = true;
-                runOnUiThread(this::showServerUrlDialog);
+                runOnUiThread(this::recreate);
             } finally {
                 isCheckingFallback = false;
             }
@@ -160,10 +173,10 @@ public class MainActivity extends BridgeActivity {
         if (clean.endsWith("/")) clean = clean.substring(0, clean.length() - 1);
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(clean + "/api/tickets/latest-alert");
+            URL url = new URL(clean + "/manifest.json");
             conn = (HttpURLConnection) url.openConnection();
-            conn.setConnectTimeout(1500);
-            conn.setReadTimeout(1500);
+            conn.setConnectTimeout(2000);
+            conn.setReadTimeout(2000);
             conn.setRequestMethod("GET");
             return conn.getResponseCode() == 200;
         } catch (Exception e) {
@@ -176,28 +189,32 @@ public class MainActivity extends BridgeActivity {
     public void showServerUrlDialog() {
         runOnUiThread(() -> {
             SharedPreferences prefs = getSharedPreferences(TicketMonitorService.PREFS_NAME, MODE_PRIVATE);
-            String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "http://192.168.0.235:3000");
+            String currentUrl = prefs.getString(TicketMonitorService.KEY_SERVER_URL, "");
 
             final EditText input = new EditText(this);
             input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+            input.setHint("Kosongkan untuk Mode Cloud Supabase Langsung");
             input.setText(currentUrl);
             int pad = (int) (16 * getResources().getDisplayMetrics().density);
             input.setPadding(pad, pad, pad, pad);
 
             new AlertDialog.Builder(this)
-                .setTitle("Alamat Server E-Tiket RSUD")
-                .setMessage("Masukkan alamat IP server lokal atau domain RSUD Labuha:")
+                .setTitle("Pengaturan Mode Server APK")
+                .setMessage("Biarkan kosong untuk Mode Cloud Bawaan (langsung Supabase), atau isi URL server lokal RSUD:")
                 .setView(input)
-                .setPositiveButton("Simpan & Hubungkan", (dialog, which) -> {
+                .setPositiveButton("Simpan & Terapkan", (dialog, which) -> {
                     String nextUrl = input.getText().toString().trim();
-                    if (!nextUrl.isEmpty()) {
-                        if (!nextUrl.startsWith("http://") && !nextUrl.startsWith("https://")) {
-                            nextUrl = "http://" + nextUrl;
-                        }
-                        prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, nextUrl).apply();
-                        startBackgroundMonitorIfEnabled();
-                        recreate();
+                    if (!nextUrl.isEmpty() && !nextUrl.startsWith("http://") && !nextUrl.startsWith("https://")) {
+                        nextUrl = "http://" + nextUrl;
                     }
+                    prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, nextUrl).apply();
+                    startBackgroundMonitorIfEnabled();
+                    recreate();
+                })
+                .setNeutralButton("Reset ke Mode Cloud", (dialog, which) -> {
+                    prefs.edit().putString(TicketMonitorService.KEY_SERVER_URL, "").apply();
+                    startBackgroundMonitorIfEnabled();
+                    recreate();
                 })
                 .setNegativeButton("Tutup", null)
                 .show();

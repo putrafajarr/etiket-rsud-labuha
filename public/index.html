@@ -24,9 +24,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <!-- Socket.io -->
-  <script src="/socket.io/socket.io.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=3.0">
+  <link rel="stylesheet" href="/css/custom.css?v=4.0">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -691,15 +689,15 @@
             </div>
 
             <div class="space-y-1.5 text-xs">
-              <label class="block font-bold text-slate-700">URL Server / Domain Rumah Sakit</label>
+              <label class="block font-bold text-slate-700">URL Server / Domain Aplikasi</label>
               <div class="flex flex-col sm:flex-row gap-2">
-                <input type="text" id="cfg_app_server_url" placeholder="Contoh: http://192.168.1.9:3000 atau https://etiket.rsudlabuha.id" class="flex-1 p-2.5 border rounded-xl bg-white text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500 shadow-sm">
+                <input type="text" id="cfg_app_server_url" placeholder="https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev" class="flex-1 p-2.5 border rounded-xl bg-white text-xs font-mono font-bold text-slate-800 outline-none focus:ring-2 focus:ring-sky-500 shadow-sm">
                 <button type="button" onclick="setQuickServerIp()" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-sm">
-                  Gunakan IP Saat Ini
+                  Gunakan Domain Saat Ini
                 </button>
               </div>
               <span class="text-[10px] text-slate-500 block">
-                💡 <b>Petunjuk:</b> Jika saat ini belum punya domain, gunakan IP komputer server saat ini (contoh: <code>http://192.168.0.235:3000</code>). Nanti kalau RSUD Labuha sudah memiliki domain (contoh: <code>https://etiket.rsudlabuha.id</code>), Anda cukup ketik nama domain di kolom ini lalu klik <b>Simpan Pengaturan</b> di bawah.
+                💡 <b>Petunjuk:</b> Gunakan domain cloud aktif (contoh: <code>https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev</code> atau domain resmi RSUD Labuha) agar QR Code ruangan &amp; APK terhubung ke database Supabase Cloud dari mana saja.
               </span>
             </div>
           </div>
@@ -938,6 +936,22 @@
         <div>
           <h4 id="modalTitle" class="font-bold text-slate-800 text-sm"></h4>
           <p id="modalDesc" class="text-xs text-slate-600 mt-1 leading-relaxed bg-sky-50/50 p-3 rounded-xl border border-sky-100"></p>
+        </div>
+
+        <!-- Lampiran Foto Kendala & Foto Bukti Penyelesaian -->
+        <div id="modalPhotosSection" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div id="modalIssuePhotoWrap" class="hidden bg-slate-50 p-2.5 rounded-xl border border-slate-200 space-y-1.5">
+            <span class="block text-[10px] font-bold uppercase tracking-wider text-slate-500">📷 Foto Kendala dari Pelapor</span>
+            <a id="modalIssuePhotoLink" href="#" target="_blank" rel="noopener noreferrer" class="block">
+              <img id="modalIssuePhoto" src="" alt="Foto Kendala" class="w-full max-h-56 object-contain rounded-lg bg-white border border-slate-100 cursor-zoom-in">
+            </a>
+          </div>
+          <div id="modalProofPhotoWrap" class="hidden bg-emerald-50/60 p-2.5 rounded-xl border border-emerald-200 space-y-1.5">
+            <span class="block text-[10px] font-bold uppercase tracking-wider text-emerald-700">✅ Foto Bukti Penyelesaian</span>
+            <a id="modalProofPhotoLink" href="#" target="_blank" rel="noopener noreferrer" class="block">
+              <img id="modalProofPhotoPreview" src="" alt="Foto Bukti Selesai" class="w-full max-h-56 object-contain rounded-lg bg-white border border-emerald-100 cursor-zoom-in">
+            </a>
+          </div>
         </div>
 
         <!-- Permanently Locked Banner for Resolved / Closed Tickets -->
@@ -1297,17 +1311,19 @@
         <div class="mt-4 pt-3 border-t border-slate-100 text-center">
           <a href="/downloads/ETIKET-RSUD-LABUHA.apk" download class="inline-flex items-center space-x-2 px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition shadow-sm active:scale-95">
             <span>📲</span>
-            <span>Download APK Android Resmi (v1.1)</span>
+            <span>Download APK Android Resmi (v1.2)</span>
           </a>
-          <p class="text-[10px] text-slate-400 mt-1">Notifikasi pop-up & suara alarm tiket langsung di HP</p>
+          <p class="text-[10px] text-slate-400 mt-1">Notifikasi pop-up &amp; suara alarm tiket langsung di HP</p>
         </div>
       </form>
     </div>
   </div>
 
-  <script src="/js/bcrypt.min.js?v=3.2"></script>
-  <script src="/js/sound.js?v=3.2"></script>
-  <script src="/js/app.js?v=3.2"></script>
+  <script src="/js/qrcode.min.js?v=4.0"></script>
+  <script src="/js/bcrypt.min.js?v=4.0"></script>
+  <script src="/js/supabase-client.js?v=4.0"></script>
+  <script src="/js/sound.js?v=4.0"></script>
+  <script src="/js/app.js?v=4.0"></script>
 </body>
 </html>
 

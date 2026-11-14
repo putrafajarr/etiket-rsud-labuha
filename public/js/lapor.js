@@ -1,6 +1,7 @@
 let roomsData = [];
 let categoriesData = [];
 let deferredPrompt = null;
+
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
@@ -27,7 +28,6 @@ function installApp() {
   }
 }
 
-// Initialize page
 document.addEventListener('DOMContentLoaded', async () => {
   await Promise.all([loadRooms(), loadCategories()]);
   checkUrlParams();
@@ -36,7 +36,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.lucide) window.lucide.createIcons();
 });
 
-// Load remembered reporter identity from localStorage
 function loadSavedIdentity() {
   const savedName = localStorage.getItem('reporter_name');
   const savedPhone = localStorage.getItem('reporter_phone');
@@ -46,37 +45,17 @@ function loadSavedIdentity() {
   if (savedEmail) document.getElementById('reporter_email').value = savedEmail;
 }
 
-// Load categories dynamically from backend / Supabase
 async function loadCategories() {
   try {
-    let res;
-    try {
-      res = await fetch('/api/categories');
-    } catch (netErr) {
-      // Backend offline, direct Supabase REST
-      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/categories?select=*&is_active=neq.0&order=id.asc', {
-        headers: {
-          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
-        }
-      });
-    }
-
-    if (!res || !res.ok) {
-      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/categories?select=*&is_active=neq.0&order=id.asc', {
-        headers: {
-          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
-        }
-      });
-    }
-
+    const res = await fetch('/api/categories');
+    if (!res.ok) throw new Error('Gagal memuat kategori');
     categoriesData = await res.json();
+
     const select = document.getElementById('category_id');
     if (!select) return;
 
     select.innerHTML = '<option value="">-- Pilih Jenis Masalah / Kategori --</option>';
-    categoriesData.forEach(c => {
+    (categoriesData || []).forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
       opt.textContent = c.name;
@@ -87,38 +66,17 @@ async function loadCategories() {
   }
 }
 
-// Load rooms from backend with resilient Supabase Cloud fallback
 async function loadRooms() {
   try {
-    let res;
-    try {
-      res = await fetch('/api/rooms');
-    } catch (netErr) {
-      // Backend offline, fallback to direct Supabase REST
-      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/rooms?select=*&is_active=neq.0&order=name.asc', {
-        headers: {
-          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
-        }
-      });
-    }
-
-    if (!res || !res.ok) {
-      res = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/rooms?select=*&is_active=neq.0&order=name.asc', {
-        headers: {
-          'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-          'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6'
-        }
-      });
-    }
-
+    const res = await fetch('/api/rooms');
+    if (!res.ok) throw new Error('Gagal memuat ruangan');
     roomsData = await res.json();
+
     const select = document.getElementById('room_id');
     if (!select) return;
-    
-    // Group rooms by building
+
     const grouped = {};
-    roomsData.forEach(r => {
+    (roomsData || []).forEach(r => {
       const b = r.building || 'Lainnya';
       if (!grouped[b]) grouped[b] = [];
       grouped[b].push(r);
@@ -142,7 +100,6 @@ async function loadRooms() {
   }
 }
 
-// Check if user came from a QR code scan with query params: ?room=IGD-01 or ?id=1
 function checkUrlParams() {
   const params = new URLSearchParams(window.location.search);
   const roomCode = params.get('room');
@@ -153,19 +110,18 @@ function checkUrlParams() {
     if (roomId) {
       matched = roomsData.find(r => r.id == roomId);
     } else if (roomCode) {
-      matched = roomsData.find(r => r.code.toUpperCase() === roomCode.toUpperCase());
+      matched = roomsData.find(r => r.code && r.code.toUpperCase() === roomCode.toUpperCase());
     }
 
     if (matched) {
       const select = document.getElementById('room_id');
       select.value = matched.id;
-      
+
       const badge = document.getElementById('qrDetectedBadge');
       const roomNameEl = document.getElementById('qrRoomName');
       roomNameEl.textContent = `${matched.name} [${matched.code}]`;
       badge.classList.remove('hidden');
 
-      // KUNCI RUANGAN: Sembunyikan pilihan dropdown agar staf tidak bisa ganti-ganti unit
       const selectContainer = document.getElementById('roomSelectContainer');
       if (selectContainer) selectContainer.classList.add('hidden');
     }
@@ -173,68 +129,85 @@ function checkUrlParams() {
 }
 
 function resetRoomSelection() {
-  document.getElementById('qrDetectedBadge').classList.add('hidden');
-  document.getElementById('room_id').value = '';
+  const badge = document.getElementById('qrDetectedBadge');
+  const select = document.getElementById('room_id');
+  const selectContainer = document.getElementById('roomSelectContainer');
+  if (badge) badge.classList.add('hidden');
+  if (select) select.value = '';
+  if (selectContainer) selectContainer.classList.remove('hidden');
 }
 
-// Helper to compress uploaded photo to a lightweight Base64 Data URL (stored directly in Supabase)
-async function compressImageToDataUrl(file) {
-  if (!file || !file.type || !file.type.startsWith('image/')) return null;
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const img = new Image();
-      img.onload = function() {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 850;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.72));
-      };
-      img.onerror = () => resolve(null);
-      img.src = e.target.result;
-    };
-    reader.onerror = () => resolve(null);
-    reader.readAsDataURL(file);
-  });
+function clearPhotoSelection() {
+  const input = document.getElementById('photoInput');
+  const previewImg = document.getElementById('imagePreview');
+  const placeholder = document.getElementById('uploadPlaceholder');
+  const container = document.getElementById('imagePreviewContainer');
+  if (input) input.value = '';
+  if (previewImg) previewImg.src = '';
+  if (placeholder) placeholder.classList.remove('hidden');
+  if (container) container.classList.add('hidden');
 }
 
-// Preview image selected by user
-function previewImage(input) {
-  if (input.files && input.files[0]) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      document.getElementById('imagePreview').src = e.target.result;
-      document.getElementById('uploadPlaceholder').classList.add('hidden');
-      document.getElementById('imagePreviewContainer').classList.remove('hidden');
-    };
-    reader.readAsDataURL(input.files[0]);
+async function previewImage(input) {
+  if (!input || !input.files || !input.files[0]) return;
+  const file = input.files[0];
+
+  try {
+    let previewUrl = null;
+    if (typeof window.compressImageFile === 'function') {
+      previewUrl = await window.compressImageFile(file, { maxDim: 1024, quality: 0.72 });
+    } else {
+      previewUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = e => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+
+    if (!previewUrl) throw new Error('Gagal membaca foto');
+    document.getElementById('imagePreview').src = previewUrl;
+    document.getElementById('uploadPlaceholder').classList.add('hidden');
+    document.getElementById('imagePreviewContainer').classList.remove('hidden');
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    clearPhotoSelection();
+    Swal.fire({
+      icon: 'warning',
+      title: 'Format Foto Tidak Didukung',
+      text: err.message || 'Silakan pilih file foto/gambar lain (JPG/PNG).',
+      confirmButtonColor: '#0284c7'
+    });
   }
 }
 
-// Setup form submit handler
 function setupForm() {
   const form = document.getElementById('reportForm');
   const btn = document.getElementById('btnSubmit');
+  if (!form || !btn) return;
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    // Basic validation
-    const phone = document.getElementById('reporter_phone').value.trim();
+    const roomVal = document.getElementById('room_id').value;
+    const catVal = document.getElementById('category_id').value;
+    const descVal = (document.getElementById('description').value || '').trim();
+    const nameVal = (document.getElementById('reporter_name').value || '').trim();
+    const phone = (document.getElementById('reporter_phone').value || '').trim();
+    const emailVal = (document.getElementById('reporter_email').value || '').trim();
+
+    if (!roomVal) {
+      Swal.fire({ icon: 'warning', title: 'Ruangan Belum Dipilih', text: 'Silakan pilih ruangan tempat kendala terjadi.', confirmButtonColor: '#0284c7' });
+      return;
+    }
+    if (!catVal) {
+      Swal.fire({ icon: 'warning', title: 'Kategori Belum Dipilih', text: 'Silakan pilih jenis kendala IT.', confirmButtonColor: '#0284c7' });
+      return;
+    }
+    if (!descVal) {
+      Swal.fire({ icon: 'warning', title: 'Rincian Kendala Kosong', text: 'Tuliskan keluhan/kerusakan secara singkat dan jelas.', confirmButtonColor: '#0284c7' });
+      return;
+    }
     if (phone.length < 9) {
       Swal.fire({
         icon: 'warning',
@@ -245,92 +218,39 @@ function setupForm() {
       return;
     }
 
+    const selectedPriority = (form.querySelector('input[name="priority"]:checked')?.value || 'medium').trim();
+    const derivedTitle = descVal.length > 75 ? descVal.substring(0, 75) + '...' : descVal;
+
     const formData = new FormData(form);
+    formData.set('room_id', roomVal);
+    formData.set('category_id', catVal);
+    formData.set('priority', selectedPriority);
+    formData.set('title', derivedTitle);
+    formData.set('description', descVal);
+    formData.set('reporter_name', nameVal);
+    formData.set('reporter_phone', phone);
+    if (emailVal) formData.set('reporter_email', emailVal);
 
     btn.disabled = true;
     btn.innerHTML = `<span class="inline-block animate-spin mr-2">🔄</span> Mengirim Laporan...`;
 
     try {
-      let data = null;
-      try {
-        const res = await fetch('/api/tickets', {
-          method: 'POST',
-          body: formData
-        });
-        if (res.ok) {
-          data = await res.json();
-        }
-      } catch (netErr) {
-        // Backend offline / static Cloudflare hosting
-      }
-
-      // Direct Supabase Fallback jika backend Node.js tidak tersedia
-      if (!data || !data.ticket) {
-        const roomId = parseInt(document.getElementById('room_id').value);
-        const catId = parseInt(document.getElementById('category_id').value);
-        const matchedRoom = roomsData.find(r => r.id === roomId);
-        const matchedCat = categoriesData.find(c => c.id === catId);
-        const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const randomNum = Math.floor(1000 + Math.random() * 9000);
-        const generatedTicketNo = `TKT-${todayStr}-${randomNum}`;
-
-        // Compress and encode photo if attached
-        let photoDataUrl = null;
-        const photoEl = document.getElementById('photoInput');
-        if (photoEl && photoEl.files && photoEl.files[0]) {
-          try {
-            photoDataUrl = await compressImageToDataUrl(photoEl.files[0]);
-          } catch (e) {
-            console.warn('[Lapor] Compress photo error:', e);
-          }
-        }
-
-        const payload = {
-          ticket_no: generatedTicketNo,
-          room_id: roomId,
-          room_name: matchedRoom ? matchedRoom.name : `Ruangan ${roomId}`,
-          category_id: catId,
-          category_name: matchedCat ? matchedCat.name : 'Umum',
-          reporter_name: document.getElementById('reporter_name').value.trim(),
-          reporter_phone: phone,
-          reporter_email: document.getElementById('reporter_email').value.trim() || null,
-          title: document.getElementById('title').value.trim(),
-          description: document.getElementById('description').value.trim(),
-          photo_url: photoDataUrl,
-          priority: matchedCat && matchedCat.default_priority ? matchedCat.default_priority : 'medium',
-          status: 'open',
-          channel: 'web_qr'
-        };
-
-        const supaRes = await fetch('https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets', {
-          method: 'POST',
-          headers: {
-            'apikey': 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-            'Authorization': 'Bearer sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6',
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!supaRes.ok) {
-          const errText = await supaRes.text();
-          throw new Error('Gagal menyimpan laporan ke server: ' + errText);
-        }
-
-        const inserted = await supaRes.json();
-        data = { ticket: (Array.isArray(inserted) && inserted.length > 0) ? inserted[0] : payload };
+      const res = await fetch('/api/tickets', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      if (!res.ok || !data || !data.ticket) {
+        throw new Error((data && data.error) || 'Gagal menyimpan laporan ke server');
       }
 
       const ticket = data.ticket;
+      const esc = typeof window.escapeHtml === 'function' ? window.escapeHtml : (v => String(v || ''));
 
-      // Save identity for effortless future reporting
-      localStorage.setItem('reporter_name', document.getElementById('reporter_name').value);
+      localStorage.setItem('reporter_name', nameVal);
       localStorage.setItem('reporter_phone', phone);
-      const emailVal = document.getElementById('reporter_email').value;
       if (emailVal) localStorage.setItem('reporter_email', emailVal);
 
-      // Success modal
       Swal.fire({
         icon: 'success',
         title: 'Laporan Berhasil Terkirim!',
@@ -338,19 +258,19 @@ function setupForm() {
           <div class="text-left bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2 space-y-2 text-sm">
             <div class="flex justify-between items-center pb-2 border-b">
               <span class="text-xs text-slate-500 font-semibold uppercase">Nomor Tiket:</span>
-              <span class="font-bold text-sky-700 text-base font-mono">${ticket.ticket_no}</span>
+              <span class="font-bold text-sky-700 text-base font-mono">${esc(ticket.ticket_no)}</span>
             </div>
             <div>
               <span class="text-xs text-slate-500">Ruangan:</span>
-              <p class="font-semibold text-slate-800">${ticket.room_name}</p>
+              <p class="font-semibold text-slate-800">${esc(ticket.room_name)}</p>
             </div>
             <div>
               <span class="text-xs text-slate-500">Keluhan:</span>
-              <p class="text-slate-700">${ticket.title}</p>
+              <p class="text-slate-700">${esc(ticket.title)}</p>
             </div>
           </div>
           <p class="text-xs text-slate-500 mt-4 leading-relaxed">
-            Notifikasi konfirmasi telah dikirimkan ke WhatsApp Anda. Tim Helpdesk IT RSUD Labuha segera memproses penanganan.
+            Laporan Anda sudah tercatat di sistem helpdesk &amp; Supabase. Simpan atau catat nomor tiket untuk melacak progres penanganan.
           </p>
         `,
         confirmButtonText: 'Lacak Progres Tiket',
@@ -363,12 +283,12 @@ function setupForm() {
           window.location.href = `/track.html?ticket=${encodeURIComponent(ticket.ticket_no)}`;
         } else {
           form.reset();
-          document.getElementById('uploadPlaceholder').classList.remove('hidden');
-          document.getElementById('imagePreviewContainer').classList.add('hidden');
+          clearPhotoSelection();
+          resetRoomSelection();
           checkUrlParams();
+          loadSavedIdentity();
         }
       });
-
     } catch (err) {
       Swal.fire({
         icon: 'error',
@@ -387,13 +307,3 @@ function setupForm() {
     }
   });
 }
-
-// Bersihkan badge Netlify secara otomatis jika terinjeksi
-(() => {
-  const purgeNetlify = () => {
-    document.querySelectorAll('[id*="netlify"], [class*="netlify"], iframe[src*="netlify"], netlify-drawer').forEach(el => el.remove());
-  };
-  purgeNetlify();
-  setInterval(purgeNetlify, 1500);
-})();
-

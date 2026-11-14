@@ -34,7 +34,10 @@ public class EtiketNativePlugin extends Plugin {
         SharedPreferences prefs = getContext().getSharedPreferences(TicketMonitorService.PREFS_NAME, Context.MODE_PRIVATE);
         SharedPreferences.Editor editor = prefs.edit();
         if (serverUrl != null && !serverUrl.trim().isEmpty()) {
-            editor.putString(TicketMonitorService.KEY_SERVER_URL, serverUrl.trim());
+            String lower = serverUrl.trim().toLowerCase();
+            if (!lower.contains("://localhost") && !lower.contains("://127.0.0.1") && !lower.contains("workers.dev")) {
+                editor.putString(TicketMonitorService.KEY_SERVER_URL, serverUrl.trim());
+            }
         }
         if (monitorEnabled != null) {
             editor.putBoolean(TicketMonitorService.KEY_MONITOR_ENABLED, monitorEnabled);

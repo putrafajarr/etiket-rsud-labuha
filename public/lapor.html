@@ -161,18 +161,24 @@
             <span class="text-[11px] text-sky-600 font-semibold">📸 Kamera / Galeri HP</span>
           </label>
           <div class="relative border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-xl p-4 sm:p-5 text-center cursor-pointer bg-sky-50/30 hover:bg-sky-50/60 transition active:scale-[0.99]" onclick="document.getElementById('photoInput').click()">
-            <input type="file" id="photoInput" name="photo" accept="image/*" capture="environment" class="hidden" onchange="previewImage(this)">
+            <input type="file" id="photoInput" name="photo" accept="image/*" class="hidden" onchange="previewImage(this)">
             <div id="uploadPlaceholder" class="space-y-1">
               <i data-lucide="camera" class="w-8 h-8 mx-auto text-sky-600"></i>
-              <p class="text-xs sm:text-sm font-bold text-slate-700">Ketuk untuk Ambil Foto dari HP</p>
-              <p class="text-[11px] text-slate-400">Foto layar error, kabel putus, atau printer macet</p>
+              <p class="text-xs sm:text-sm font-bold text-slate-700">Ketuk untuk Ambil / Pilih Foto</p>
+              <p class="text-[11px] text-slate-400">Kamera HP atau Galeri (Foto layar error, kabel putus, printer macet)</p>
             </div>
             <div id="imagePreviewContainer" class="hidden">
               <img id="imagePreview" src="" alt="Preview" class="max-h-52 mx-auto rounded-lg shadow-sm border border-slate-200">
-              <p class="text-xs text-sky-700 mt-2 font-bold flex items-center justify-center space-x-1">
-                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                <span>Ketuk untuk mengganti foto</span>
-              </p>
+              <div class="mt-2.5 flex items-center justify-center gap-3">
+                <span class="text-xs text-sky-700 font-bold inline-flex items-center space-x-1">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span>Ketuk untuk ganti</span>
+                </span>
+                <button type="button" onclick="event.stopPropagation(); clearPhotoSelection()" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold inline-flex items-center space-x-1 transition">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  <span>Hapus Foto</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -244,7 +250,8 @@
     </div>
   </main>
 
-  <script src="/js/lapor.js"></script>
+  <script src="/js/supabase-client.js?v=4.0"></script>
+  <script src="/js/lapor.js?v=4.0"></script>
   <script>
     lucide.createIcons();
     // Register Service Worker for PWA

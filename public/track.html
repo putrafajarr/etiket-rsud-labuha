@@ -142,10 +142,35 @@
           </div>
         </div>
 
+        <!-- Rating Kepuasan -->
+        <div id="ratingSection" class="hidden border-t border-slate-100 pt-5">
+          <div id="ratingFormBox" class="bg-sky-50/60 border border-sky-200 rounded-2xl p-4 space-y-3">
+            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider">Penilaian Layanan Tim IT</h4>
+            <p class="text-xs text-slate-500">Bagaimana penanganan kendala Anda? Pilih rating bintang 1 sampai 5:</p>
+            <div class="flex items-center space-x-2" id="starContainer">
+              <button type="button" onclick="selectStar(1)" class="star-btn text-2xl text-slate-300 hover:scale-110 transition">★</button>
+              <button type="button" onclick="selectStar(2)" class="star-btn text-2xl text-slate-300 hover:scale-110 transition">★</button>
+              <button type="button" onclick="selectStar(3)" class="star-btn text-2xl text-slate-300 hover:scale-110 transition">★</button>
+              <button type="button" onclick="selectStar(4)" class="star-btn text-2xl text-slate-300 hover:scale-110 transition">★</button>
+              <button type="button" onclick="selectStar(5)" class="star-btn text-2xl text-slate-300 hover:scale-110 transition">★</button>
+            </div>
+            <textarea id="ratingFeedback" rows="2" placeholder="Tulis masukan / apresiasi Anda (opsional)..." class="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-sky-500"></textarea>
+            <button type="button" onclick="submitRating()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl transition shadow-sm">
+              Kirim Penilaian
+            </button>
+          </div>
+          <div id="ratingSubmittedBox" class="hidden bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-xs text-emerald-900">
+            <p class="font-bold">Terima kasih atas penilaian Anda!</p>
+            <p class="mt-1">Rating: <span id="savedRatingStars" class="font-bold text-amber-500"></span></p>
+            <p id="savedRatingFeedback" class="text-slate-600 mt-0.5 italic"></p>
+          </div>
+        </div>
+
       </div>
     </div>
   </main>
 
+  <script src="/js/supabase-client.js?v=4.0"></script>
   <script>
     let currentTicket = null;
     let selectedRating = 0;
@@ -244,6 +269,7 @@
       else photosSection.classList.add('hidden');
 
       // Render Logs
+      const esc = typeof window.escapeHtml === 'function' ? window.escapeHtml : (v => String(v || ''));
       const timeline = document.getElementById('timelineList');
       timeline.innerHTML = '';
       if (logs && logs.length > 0) {
@@ -253,11 +279,11 @@
           item.innerHTML = `
             <div class="absolute -left-[31px] top-0 w-3.5 h-3.5 rounded-full bg-sky-600 border-2 border-white ring-2 ring-sky-100"></div>
             <div class="flex justify-between items-center mb-0.5">
-              <span class="font-bold text-slate-800 text-xs">${l.action}</span>
+              <span class="font-bold text-slate-800 text-xs">${esc(l.action)}</span>
               <span class="text-[10px] text-slate-400">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-            <p class="text-slate-600">${l.notes || '-'}</p>
-            <span class="text-[10px] text-slate-400 mt-0.5 block">Oleh: ${l.user_name}</span>
+            <p class="text-slate-600">${esc(l.notes || '-')}</p>
+            <span class="text-[10px] text-slate-400 mt-0.5 block">Oleh: ${esc(l.user_name)}</span>
           `;
           timeline.appendChild(item);
         });
@@ -265,7 +291,62 @@
         timeline.innerHTML = '<p class="text-slate-400">Belum ada riwayat aktivitas tambahan.</p>';
       }
 
+      // Rating section visibility
+      const ratingSection = document.getElementById('ratingSection');
+      const ratingFormBox = document.getElementById('ratingFormBox');
+      const ratingSubmittedBox = document.getElementById('ratingSubmittedBox');
+      if (ticket.satisfaction_rating) {
+        ratingSection.classList.remove('hidden');
+        ratingFormBox.classList.add('hidden');
+        ratingSubmittedBox.classList.remove('hidden');
+        document.getElementById('savedRatingStars').textContent = '★'.repeat(ticket.satisfaction_rating) + ` (${ticket.satisfaction_rating}/5)`;
+        document.getElementById('savedRatingFeedback').textContent = ticket.satisfaction_feedback ? `"${ticket.satisfaction_feedback}"` : '';
+      } else if (ticket.status === 'resolved' || ticket.status === 'closed') {
+        selectedRating = 0;
+        selectStar(0);
+        ratingSection.classList.remove('hidden');
+        ratingFormBox.classList.remove('hidden');
+        ratingSubmittedBox.classList.add('hidden');
+      } else {
+        ratingSection.classList.add('hidden');
+      }
+
       lucide.createIcons();
+    }
+
+    function selectStar(num) {
+      selectedRating = num;
+      document.querySelectorAll('#starContainer .star-btn').forEach((btn, idx) => {
+        if (idx < num) {
+          btn.classList.remove('text-slate-300');
+          btn.classList.add('text-amber-400');
+        } else {
+          btn.classList.remove('text-amber-400');
+          btn.classList.add('text-slate-300');
+        }
+      });
+    }
+
+    async function submitRating() {
+      if (!currentTicket) return;
+      if (!selectedRating || selectedRating < 1 || selectedRating > 5) {
+        Swal.fire('Pilih Bintang', 'Silakan pilih 1 sampai 5 bintang terlebih dahulu.', 'warning');
+        return;
+      }
+      const feedback = document.getElementById('ratingFeedback').value.trim();
+      try {
+        const res = await fetch(`/api/tickets/${currentTicket.id}/rate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: selectedRating, feedback })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Gagal menyimpan penilaian');
+        Swal.fire({ icon: 'success', title: 'Terima Kasih!', text: 'Penilaian kepuasan Anda berhasil disimpan.', timer: 1800, showConfirmButton: false });
+        await searchTicket();
+      } catch (err) {
+        Swal.fire('Error', err.message, 'error');
+      }
     }
   </script>
 </body>

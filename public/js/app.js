@@ -48,7 +48,6 @@ async function initMobileNativeBridge() {
 
     if (cap.Plugins && cap.Plugins.EtiketNative) {
       await cap.Plugins.EtiketNative.configure({
-        serverUrl: window.location.origin,
         monitorEnabled: true
       });
       await cap.Plugins.EtiketNative.requestPermission();
@@ -189,6 +188,7 @@ function setAuthenticatedUser(user) {
   if (navName) navName.textContent = user.name;
   if (navRole) {
     const roleLabels = {
+      koordinator: 'Koordinator IT',
       superadmin: 'Super Admin',
       kepala_it: 'Koordinator IT',
       helpdesk: 'Helpdesk IT',
@@ -221,69 +221,24 @@ async function handleLogin(e) {
   btnSubmit.innerHTML = `<span>Memverifikasi...</span>`;
 
   try {
-    let authUser = null;
-    let authToken = null;
-
-    // 1. Coba login ke Backend Node.js
-    try {
-      const res = await window._originalFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        authUser = data.user;
-        authToken = data.token;
-      }
-    } catch (nodeErr) {
-      // Backend offline or static hosting
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok || !data || !data.user) {
+      throw new Error((data && data.error) || 'Username atau password salah');
     }
 
-    // 2. Fallback Supabase Cloud jika backend Node.js tidak tersedia (misal di Cloudflare)
-    if (!authUser) {
-      const supaUrl = `${SUPABASE_REST_URL}/users?or=(username.ilike.${encodeURIComponent(username)},email.ilike.${encodeURIComponent(username)})&is_active=neq.0`;
-      const supaRes = await window._originalFetch(supaUrl, {
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-        }
-      });
-
-      if (supaRes.ok) {
-        const rows = await supaRes.json();
-        if (rows && rows.length > 0) {
-          const u = rows[0];
-          let matched = false;
-          const bcryptLib = window.bcrypt || (window.dcodeIO && window.dcodeIO.bcrypt);
-          if (bcryptLib && typeof bcryptLib.compareSync === 'function') {
-            try {
-              matched = bcryptLib.compareSync(password, u.password_hash);
-            } catch (bErr) {
-              console.warn('[Login] Bcrypt compare error:', bErr);
-            }
-          }
-          if (!matched && u.password_hash === password) {
-            matched = true;
-          }
-
-          if (matched) {
-            const safeUser = { ...u };
-            delete safeUser.password_hash;
-            authUser = safeUser;
-            authToken = 'sb_' + btoa(unescape(encodeURIComponent(JSON.stringify(safeUser))));
-          }
-        }
-      }
-    }
-
-    if (!authUser) {
-      throw new Error('Username atau password salah');
-    }
+    const authUser = data.user;
+    const authToken = data.token;
 
     localStorage.setItem('etiket_token', authToken);
     setAuthenticatedUser(authUser);
     document.getElementById('loginOverlay').classList.add('hidden');
+
+    await Promise.all([loadTechnicians(), loadRoomsMaster(), loadTickets(), loadStats()]);
 
     Swal.fire({
       icon: 'success',
@@ -333,9 +288,12 @@ function logoutUser() {
   });
 }
 
-// Socket.io Realtime Listener
-function initSocket() {
+// Socket.io Realtime Listener (loaded only on local Node.js host)
+async function initSocket() {
   try {
+    if (typeof io !== 'function' && window.isLocalBackendHost && window.isLocalBackendHost() && typeof window.ensureScriptLoaded === 'function') {
+      await window.ensureScriptLoaded('/socket.io/socket.io.js').catch(() => {});
+    }
     if (typeof io === 'function') {
       socket = io();
 
@@ -343,7 +301,6 @@ function initSocket() {
         console.log('[Socket] Connected to RSUD Labuha server');
       });
 
-      // Event: New ticket created from anywhere (Web, QR, Android, Bot WA/TG)
       socket.on('ticket_created', (data) => {
         const t = data.ticket;
         if (window.soundAlert) {
@@ -369,7 +326,6 @@ function initSocket() {
         if (currentTab === 'technician') loadTechnicianTickets();
       });
 
-      // Event: Ticket status updated or assigned
       socket.on('ticket_updated', (data) => {
         if (data.action === 'resolved') {
           if (window.soundAlert) window.soundAlert.playSuccess();
@@ -378,179 +334,15 @@ function initSocket() {
         loadStats();
         if (currentTab === 'technician') loadTechnicianTickets();
       });
-    } else {
-      console.log('[Socket] io() is not available, relying on auto-sync background polling');
     }
   } catch (err) {
-    console.warn('[Socket] Socket init fallback to polling:', err);
+    console.debug('[Socket] Using Supabase Cloud auto-sync polling');
   }
 }
 
 // =============================================================================
-// Supabase Cloud & Resilient Fetch Layer (Online anywhere, zero reinstallations)
+// Supabase Cloud & Resilient Fetch Layer provided by /js/supabase-client.js
 // =============================================================================
-const SUPABASE_REST_URL = 'https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1';
-const SUPABASE_ANON_KEY = 'sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6';
-
-async function smartFetch(url, options = {}) {
-  let targetUrl = url;
-  const customBase = localStorage.getItem('server_api_url');
-  if (customBase && url.startsWith('/api/')) {
-    targetUrl = customBase.replace(/\/+$/, '') + url;
-  }
-
-  const isLocalServer = customBase || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
-  // 1. Jika terhubung ke server lokal LAN (IP RSUD): Coba backend lokal terlebih dahulu
-  if (isLocalServer) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
-      const fetchOptions = { ...options, signal: controller.signal };
-      const res = await window._originalFetch(targetUrl, fetchOptions);
-      clearTimeout(timeout);
-      if (res.ok) return res;
-    } catch (err) {
-      console.debug(`[SmartFetch] Local backend ${targetUrl} unreachable, falling back to Supabase Cloud...`);
-    }
-  }
-
-  // 2. Di Cloud (Netlify/Vercel/PWA): Langsung ambil dari Supabase REST (0 kuota Serverless Function!)
-  if (!options.method || options.method === 'GET') {
-    const supaHeaders = {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      'Content-Type': 'application/json'
-    };
-
-    try {
-      if (url.startsWith('/api/tickets')) {
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/tickets?select=*&order=created_at.desc`, {
-          headers: supaHeaders
-        });
-        if (supaRes.ok) return supaRes;
-      } else if (url.startsWith('/api/rooms')) {
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/rooms?select=*&is_active=neq.0&order=name.asc`, {
-          headers: supaHeaders
-        });
-        if (supaRes.ok) return supaRes;
-      } else if (url.startsWith('/api/categories')) {
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/categories?select=*&is_active=neq.0&order=id.asc`, {
-          headers: supaHeaders
-        });
-        if (supaRes.ok) return supaRes;
-      } else if (url.startsWith('/api/users/technicians') || url.startsWith('/api/users')) {
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/users?select=id,username,name,role,phone,email&is_active=neq.0`, {
-          headers: supaHeaders
-        });
-        if (supaRes.ok) return supaRes;
-      } else if (url.startsWith('/api/reports/stats')) {
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/tickets?select=id,status,priority`, {
-          headers: supaHeaders
-        });
-        if (supaRes.ok) {
-          const rows = await supaRes.json();
-          const total = rows.length;
-          const open = rows.filter(r => r.status === 'open').length;
-          const inProgress = rows.filter(r => r.status === 'in_progress').length;
-          const resolved = rows.filter(r => r.status === 'resolved' || r.status === 'closed').length;
-          return new Response(JSON.stringify({
-            total,
-            open,
-            inProgress,
-            resolved,
-            slaCompliance: 100
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-        }
-      }
-    } catch (supaErr) {
-      console.warn('[SmartFetch] Direct Supabase fallback error:', supaErr);
-    }
-  }
-
-  // 3. Fallback jika PATCH status / assign tiket di Cloud
-  if (options && options.method === 'PATCH' && url.includes('/api/tickets/')) {
-    const ticketIdMatch = url.match(/\/api\/tickets\/(\d+)/);
-    if (ticketIdMatch) {
-      const tId = ticketIdMatch[1];
-      const supaHeaders = {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      };
-
-      try {
-        let rawBody = {};
-        if (typeof options.body === 'string') {
-          try { rawBody = JSON.parse(options.body); } catch (e) { rawBody = {}; }
-        } else if (typeof options.body === 'object' && options.body !== null) {
-          rawBody = options.body;
-        }
-
-        let patchData = {};
-        if (url.includes('/assign')) {
-          const techId = parseInt(rawBody.technician_id || rawBody.assigned_to);
-          const matchedTech = (techniciansData || []).find(t => t.id === techId);
-          const techName = matchedTech ? matchedTech.name : (rawBody.assigned_by_name || 'Teknisi IT');
-          patchData = {
-            assigned_to: techId,
-            assigned_to_name: techName,
-            assigned_at: new Date().toISOString(),
-            status: 'in_progress',
-            actual_response_time: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
-        } else if (url.includes('/status')) {
-          patchData = {
-            status: rawBody.status,
-            updated_at: new Date().toISOString()
-          };
-          if (rawBody.status === 'in_progress') {
-            patchData.actual_response_time = new Date().toISOString();
-          } else if (rawBody.status === 'resolved' || rawBody.status === 'closed') {
-            patchData.resolved_at = new Date().toISOString();
-            if (rawBody.resolution_notes) patchData.resolution_notes = rawBody.resolution_notes;
-          }
-          if (rawBody.pending_reason) patchData.pending_reason = rawBody.pending_reason;
-        } else {
-          patchData = rawBody;
-        }
-
-        const supaRes = await window._originalFetch(`${SUPABASE_REST_URL}/tickets?id=eq.${tId}`, {
-          method: 'PATCH',
-          headers: supaHeaders,
-          body: JSON.stringify(patchData)
-        });
-
-        if (supaRes.ok) {
-          const updatedRows = await supaRes.json();
-          const ticket = Array.isArray(updatedRows) ? updatedRows[0] : updatedRows;
-          return new Response(JSON.stringify({ success: true, ticket: ticket || patchData }), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-      } catch (err) {
-        console.warn('[SmartFetch] Direct Supabase PATCH fallback error:', err);
-      }
-    }
-  }
-
-  // 4. Fallback terakhir jika server lokal aktif
-  return window._originalFetch(targetUrl, options);
-}
-
-// Transparently intercept window.fetch so all /api/ calls in the app gain resilience
-if (!window._originalFetch) {
-  window._originalFetch = window.fetch;
-  window.fetch = function (url, options) {
-    if (typeof url === 'string' && (url.startsWith('/api/') || url.includes('/api/'))) {
-      return smartFetch(url, options);
-    }
-    return window._originalFetch.apply(this, arguments);
-  };
-}
 
 // =============================================================================
 // Comprehensive 2-Second Supabase Real-Time Auto-Sync Engine
@@ -1112,34 +904,52 @@ function setTableSubView(mode) {
   lucide.createIcons();
 }
 
+// Safe HTML escaping delegate (uses helper from supabase-client.js)
+function esc(value) {
+  return typeof window.escapeHtml === 'function' ? window.escapeHtml(value) : String(value ?? '');
+}
+
 // Debounce search filter
 function debounceFilter() {
   clearTimeout(filterTimeout);
   filterTimeout = setTimeout(() => {
-    loadTickets();
-  }, 300);
+    renderTickets();
+  }, 200);
 }
 
-// Load Tickets
+// Load Tickets (keeps allTickets unfiltered; toolbar filters apply cleanly in renderTickets)
 async function loadTickets() {
-  const search = document.getElementById('filterSearch').value.trim();
-  const priority = document.getElementById('filterPriority').value;
-  const roomId = document.getElementById('filterRoom').value;
-
-  let url = `/api/tickets?priority=${priority}`;
-  if (roomId) url += `&roomId=${roomId}`;
-  if (search) url += `&search=${encodeURIComponent(search)}`;
-
   try {
-    const res = await fetch(url);
-    allTickets = await res.json();
+    const res = await fetch('/api/tickets');
+    const rows = await res.json();
+    if (Array.isArray(rows)) {
+      allTickets = rows;
+    }
     renderTickets();
   } catch (err) {
     console.error('Failed to load tickets:', err);
   }
 }
 
-// Render Kanban & Table
+function getFilteredTickets(list) {
+  const search = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
+  const priority = document.getElementById('filterPriority')?.value || 'all';
+  const roomId = document.getElementById('filterRoom')?.value || '';
+
+  return (list || []).filter(t => {
+    if (priority && priority !== 'all' && t.priority !== priority) return false;
+    if (roomId && String(t.room_id) !== String(roomId)) return false;
+    if (search) {
+      const hay = [t.ticket_no, t.title, t.description, t.room_name, t.category_name, t.reporter_name, t.assigned_to_name]
+        .map(v => String(v || '').toLowerCase())
+        .join(' ');
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+}
+
+// Render Kanban, Desktop Table & Mobile Cards
 function renderTickets() {
   const openList = document.getElementById('colOpenList');
   const assignedList = document.getElementById('colAssignedList');
@@ -1155,9 +965,10 @@ function renderTickets() {
   if (tableBody) tableBody.innerHTML = '';
   if (mobileCardContainer) mobileCardContainer.innerHTML = '';
 
+  const visibleTickets = getFilteredTickets(allTickets);
   let countOpen = 0, countAssigned = 0, countProgress = 0, countResolved = 0;
 
-  if (allTickets.length === 0) {
+  if (visibleTickets.length === 0) {
     if (tableBody) {
       tableBody.innerHTML = `
         <tr>
@@ -1180,8 +991,16 @@ function renderTickets() {
     }
   }
 
-  allTickets.forEach(t => {
-    // Priority styling
+  visibleTickets.forEach(t => {
+    const safeTicketNo = esc(t.ticket_no);
+    const safeTitle = esc(t.title);
+    const safeRoom = esc(t.room_name);
+    const safeCategory = esc(t.category_name);
+    const safeReporter = esc(t.reporter_name);
+    const safeTechName = esc(t.assigned_to_name);
+    const hasPhoto = Boolean(t.photo_url);
+    const hasProof = Boolean(t.proof_photo_url);
+
     const priorityClasses = {
       critical: 'ticket-critical bg-rose-50/40 border-rose-200',
       high: 'ticket-high bg-orange-50/40 border-orange-200',
@@ -1189,14 +1008,20 @@ function renderTickets() {
       low: 'ticket-low bg-sky-50/40 border-sky-200'
     }[t.priority] || 'bg-white border-slate-200';
 
-    const priorityBadge = {
-      critical: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-rose-600 text-white whitespace-nowrap shadow-sm">🚨 Kritis</span>',
-      high: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-orange-500 text-white whitespace-nowrap shadow-sm">🔴 Tinggi</span>',
-      medium: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500 text-white whitespace-nowrap shadow-sm">🟡 Sedang</span>',
-      low: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-sky-500 text-white whitespace-nowrap shadow-sm">🟢 Rendah</span>'
-    }[t.priority] || `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 whitespace-nowrap">${t.priority}</span>`;
+    const mobileBorderAccent = {
+      critical: 'border-l-4 border-l-rose-600',
+      high: 'border-l-4 border-l-orange-500',
+      medium: 'border-l-4 border-l-amber-500',
+      low: 'border-l-4 border-l-sky-500'
+    }[t.priority] || 'border-l-4 border-l-slate-300';
 
-    // Status Badge
+    const priorityBadge = {
+      critical: '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-black bg-rose-600 text-white whitespace-nowrap shadow-sm">🚨 Kritis</span>',
+      high: '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-orange-500 text-white whitespace-nowrap shadow-sm">🔴 Tinggi</span>',
+      medium: '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500 text-white whitespace-nowrap shadow-sm">🟡 Sedang</span>',
+      low: '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-sky-500 text-white whitespace-nowrap shadow-sm">🟢 Rendah</span>'
+    }[t.priority] || `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 whitespace-nowrap">${esc(t.priority)}</span>`;
+
     const statusBadge = {
       open: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>Tiket Baru</span>',
       assigned: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Ditugaskan</span>',
@@ -1204,9 +1029,8 @@ function renderTickets() {
       pending: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Pending</span>',
       resolved: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">✓ Selesai</span>',
       closed: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">✓ Ditutup</span>'
-    }[t.status] || `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">${t.status}</span>`;
+    }[t.status] || `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">${esc(t.status)}</span>`;
 
-    // Format date and time
     const createdDate = new Date(t.created_at);
     const dateFormatted = !isNaN(createdDate)
       ? createdDate.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -1215,39 +1039,45 @@ function renderTickets() {
       ? createdDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
       : '-';
 
-    // Technician Pill Badge
-    let techBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">⏳ Belum Ditugaskan</span>';
+    let techBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">⏳ Belum Ditugaskan</span>';
     if (t.assigned_to) {
       const isMe = activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name);
       if (isMe) {
-        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap">👤 ${t.assigned_to_name} (Anda)</span>`;
+        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap">👤 ${safeTechName} (Anda)</span>`;
       } else {
-        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap">🔒 ${t.assigned_to_name}</span>`;
+        techBadge = `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300 whitespace-nowrap">🔒 ${safeTechName || 'Teknisi'}</span>`;
       }
     }
+
+    const attachmentChips =
+      (hasPhoto ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 text-[9px] font-bold">📷 Foto</span>' : '') +
+      (hasProof ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold">✅ Bukti</span>' : '');
 
     // Card element for Kanban
     const card = document.createElement('div');
     card.className = `p-3.5 rounded-xl border bg-white shadow-sm hover:shadow-md transition cursor-pointer space-y-2.5 ${priorityClasses}`;
     card.onclick = () => openTicketModal(t.id);
     card.innerHTML = `
-      <div class="flex items-center justify-between">
-        <span class="font-mono font-bold text-xs text-sky-700">${t.ticket_no}</span>
+      <div class="flex items-center justify-between gap-1.5">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="font-mono font-bold text-xs text-sky-700 truncate">${safeTicketNo}</span>
+          ${attachmentChips}
+        </div>
         ${priorityBadge}
       </div>
       <div>
-        <h4 class="font-bold text-slate-800 text-xs line-clamp-2 leading-snug">${t.title}</h4>
+        <h4 class="font-bold text-slate-800 text-xs line-clamp-2 leading-snug">${safeTitle}</h4>
         <p class="text-[11px] text-slate-500 font-semibold mt-1 flex items-center">
-          <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-slate-400"></i> ${t.room_name}
+          <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-slate-400 shrink-0"></i>
+          <span class="truncate">${safeRoom}</span>
         </p>
       </div>
       <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-        <span class="truncate max-w-[100px]">👤 ${t.reporter_name}</span>
-        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + (t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
+        <span class="truncate max-w-[110px]">👤 ${safeReporter}</span>
+        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + esc(t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
       </div>
     `;
 
-    // Append to Kanban column
     if (t.status === 'open') {
       if (openList) openList.appendChild(card);
       countOpen++;
@@ -1262,33 +1092,35 @@ function renderTickets() {
       countResolved++;
     }
 
-    // Append to Full Table
+    // Append to Full Desktop/Tablet Table (aligned, zebra, compact)
     if (tableBody) {
       const tr = document.createElement('tr');
-      tr.className = 'hover:bg-sky-50/50 cursor-pointer transition whitespace-nowrap border-b border-slate-100';
+      tr.className = 'even:bg-slate-50/40 hover:bg-sky-50/60 cursor-pointer transition whitespace-nowrap border-b border-slate-100';
       tr.onclick = () => openTicketModal(t.id);
       tr.innerHTML = `
-        <td class="p-3.5 font-mono font-bold text-sky-700 whitespace-nowrap text-xs">${t.ticket_no}</td>
-        <td class="p-3.5 text-slate-500 whitespace-nowrap text-xs">
+        <td class="px-3.5 py-3 font-mono font-bold text-sky-700 whitespace-nowrap text-xs align-middle">
+          <div class="flex items-center gap-1.5">
+            <span>${safeTicketNo}</span>
+            ${attachmentChips}
+          </div>
+        </td>
+        <td class="px-3.5 py-3 text-slate-500 whitespace-nowrap text-xs align-middle">
           <div class="font-bold text-slate-700 leading-tight">${dateFormatted}</div>
           <div class="text-[10px] text-slate-400 font-mono mt-0.5">${timeFormatted} WIT</div>
         </td>
-        <td class="p-3.5 font-bold text-slate-800 whitespace-nowrap text-xs">
-          <div class="flex items-center space-x-1.5">
-            <span class="text-sm">🏥</span>
-            <span>${t.room_name}</span>
-          </div>
+        <td class="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap text-xs align-middle max-w-[180px] truncate" title="${safeRoom}">
+          <span>🏥 ${safeRoom}</span>
         </td>
-        <td class="p-3.5 whitespace-nowrap text-xs">
-          <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">${t.category_name}</span>
+        <td class="px-3.5 py-3 whitespace-nowrap text-xs align-middle">
+          <span class="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-bold">${safeCategory}</span>
         </td>
-        <td class="p-3.5 whitespace-nowrap text-xs">${priorityBadge}</td>
-        <td class="p-3.5 text-slate-700 whitespace-nowrap text-xs font-semibold">${t.reporter_name}</td>
-        <td class="p-3.5 text-slate-800 text-xs max-w-xs truncate font-medium" title="${(t.title || '').replace(/"/g, '&quot;')}">${t.title}</td>
-        <td class="p-3.5 whitespace-nowrap text-xs">${techBadge}</td>
-        <td class="p-3.5 whitespace-nowrap text-xs">${statusBadge}</td>
-        <td class="p-3.5 text-center whitespace-nowrap text-xs">
-          <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center space-x-1 mx-auto active:scale-95">
+        <td class="px-3.5 py-3 whitespace-nowrap text-xs align-middle">${priorityBadge}</td>
+        <td class="px-3.5 py-3 text-slate-700 whitespace-nowrap text-xs font-semibold align-middle max-w-[130px] truncate" title="${safeReporter}">${safeReporter}</td>
+        <td class="px-3.5 py-3 text-slate-800 text-xs max-w-[220px] truncate font-medium align-middle" title="${safeTitle}">${safeTitle}</td>
+        <td class="px-3.5 py-3 whitespace-nowrap text-xs align-middle">${techBadge}</td>
+        <td class="px-3.5 py-3 whitespace-nowrap text-xs align-middle">${statusBadge}</td>
+        <td class="px-3.5 py-3 text-center whitespace-nowrap text-xs align-middle">
+          <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm inline-flex items-center space-x-1 active:scale-95">
             <i data-lucide="eye" class="w-3.5 h-3.5"></i>
             <span>Buka</span>
           </button>
@@ -1297,16 +1129,17 @@ function renderTickets() {
       tableBody.appendChild(tr);
     }
 
-    // Append to Mobile Card List
+    // Append to Mobile Card List (APK & Mobile Web)
     if (mobileCardContainer) {
       const mCard = document.createElement('div');
-      mCard.className = 'p-3.5 sm:p-4 bg-white hover:bg-sky-50/40 transition cursor-pointer space-y-2.5 active:bg-slate-50 border-b border-slate-100';
+      mCard.className = `p-3.5 sm:p-4 bg-white hover:bg-sky-50/40 transition cursor-pointer space-y-2.5 active:bg-slate-50 border-b border-slate-100 ${mobileBorderAccent}`;
       mCard.onclick = () => openTicketModal(t.id);
       mCard.innerHTML = `
         <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center space-x-2 min-w-0">
-            <span class="font-mono font-bold text-sky-700 text-xs">${t.ticket_no}</span>
+          <div class="flex items-center flex-wrap gap-1.5 min-w-0">
+            <span class="font-mono font-bold text-sky-700 text-xs">${safeTicketNo}</span>
             <span class="text-[10px] text-slate-400 font-medium">${dateFormatted} • ${timeFormatted} WIT</span>
+            ${attachmentChips}
           </div>
           <div class="shrink-0">
             ${statusBadge}
@@ -1316,7 +1149,7 @@ function renderTickets() {
         <div class="flex items-center justify-between gap-2">
           <div class="font-bold text-slate-800 text-sm flex items-center space-x-1.5 min-w-0">
             <span class="text-base shrink-0">🏥</span>
-            <span class="truncate">${t.room_name}</span>
+            <span class="truncate">${safeRoom}</span>
           </div>
           <div class="shrink-0">
             ${priorityBadge}
@@ -1325,16 +1158,16 @@ function renderTickets() {
 
         <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs text-slate-700 font-medium leading-relaxed">
           <span class="text-slate-400 text-[10px] block font-bold uppercase tracking-wider mb-0.5">Uraian Kendala:</span>
-          <p class="line-clamp-2">${t.title}</p>
+          <p class="line-clamp-2">${safeTitle}</p>
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
-          <div class="flex items-center space-x-1.5 text-slate-500 text-[11px]">
-            <span class="font-semibold text-slate-700 truncate max-w-[120px]">👤 ${t.reporter_name}</span>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-xs">
+          <div class="flex items-center space-x-1.5 text-slate-500 text-[11px] min-w-0">
+            <span class="font-semibold text-slate-700 truncate max-w-[115px]">👤 ${safeReporter}</span>
             <span class="text-slate-300">•</span>
-            <span class="text-slate-500 truncate max-w-[100px]">${t.category_name}</span>
+            <span class="text-slate-500 truncate max-w-[95px]">${safeCategory}</span>
           </div>
-          <div class="flex items-center space-x-1.5">
+          <div class="flex items-center space-x-1.5 shrink-0">
             ${techBadge}
             <button onclick="event.stopPropagation(); openTicketModal(${t.id})" class="px-3 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold transition shadow-sm">
               Buka
@@ -1367,12 +1200,19 @@ async function loadRoomsMaster() {
     const res = await fetch('/api/rooms');
     allRooms = await res.json();
 
-    // Filter dropdown
+    // Filter dropdown (preserve current filter selection)
     const filterSelect = document.getElementById('filterRoom');
-    filterSelect.innerHTML = '<option value="">Semua Ruangan RSUD</option>';
-    allRooms.forEach(r => {
-      filterSelect.innerHTML += `<option value="${r.id}">${r.name}</option>`;
-    });
+    const prevSelected = filterSelect ? filterSelect.value : '';
+    if (filterSelect) {
+      filterSelect.innerHTML = '<option value="">Semua Ruangan RSUD</option>';
+      allRooms.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = String(r.id);
+        opt.textContent = r.name;
+        filterSelect.appendChild(opt);
+      });
+      if (prevSelected) filterSelect.value = prevSelected;
+    }
 
     // Rooms Grid Tab
     const roomsGrid = document.getElementById('roomsGrid');
@@ -1402,11 +1242,11 @@ async function loadRoomsMaster() {
       card.innerHTML = `
         <div>
           <div class="flex items-center justify-between">
-            <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${r.code}</span>
-            <span class="text-[10px] text-slate-400 font-semibold">${r.floor || 'Lantai 1'}</span>
+            <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${esc(r.code)}</span>
+            <span class="text-[10px] text-slate-400 font-semibold">${esc(r.floor || 'Lantai 1')}</span>
           </div>
-          <h4 class="font-bold text-slate-800 text-xs mt-2">${r.name}</h4>
-          <p class="text-[11px] text-slate-400">${r.building || 'Gedung RSUD'}</p>
+          <h4 class="font-bold text-slate-800 text-xs mt-2">${esc(r.name)}</h4>
+          <p class="text-[11px] text-slate-400">${esc(r.building || 'Gedung RSUD')}</p>
         </div>
         <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
           <div class="flex items-center space-x-1.5">
@@ -1421,7 +1261,7 @@ async function loadRoomsMaster() {
             <button onclick="openEditRoomModal(${r.id})" class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Edit Unit">
               <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
             </button>
-            <button onclick="deleteRoom(${r.id}, '${r.name.replace(/'/g, "\\'")}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Unit">
+            <button onclick="deleteRoomById(${r.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Unit">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
             </button>
           </div>
@@ -1590,6 +1430,11 @@ async function submitAddRoom(e) {
   }
 }
 
+function deleteRoomById(roomId) {
+  const room = (allRooms || []).find(r => r.id === roomId);
+  return deleteRoom(roomId, room ? room.name : 'Ruangan Ini');
+}
+
 async function deleteRoom(roomId, roomName) {
   const result = await Swal.fire({
     title: 'Hapus Ruangan / Unit?',
@@ -1629,33 +1474,46 @@ async function loadUsers() {
     const tbody = document.getElementById('usersTableBody');
     tbody.innerHTML = '';
 
+    if (!allUsersData || allUsersData.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="p-8 text-center text-slate-400 text-xs">
+            Belum ada akun pengguna aktif di database Supabase.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
     allUsersData.forEach(u => {
       const roleBadge = {
         koordinator: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
         kepala_it: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
         superadmin: '<span class="bg-indigo-100 text-indigo-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Koordinator IT</span>',
         teknisi: '<span class="bg-emerald-100 text-emerald-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">Teknisi IT</span>'
-      }[u.role] || `<span class="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">${u.role}</span>`;
+      }[u.role] || `<span class="bg-slate-100 text-slate-700 font-bold px-2.5 py-1 rounded-lg text-[10px] whitespace-nowrap inline-block">${esc(u.role)}</span>`;
 
-      const statusBadge = u.is_active === 1
+      const isActive = u.is_active === undefined || u.is_active === null || u.is_active === 1 || u.is_active === true;
+      const statusBadge = isActive
         ? '<span class="text-emerald-600 font-bold whitespace-nowrap">● Aktif</span>'
         : '<span class="text-rose-500 font-bold whitespace-nowrap">● Nonaktif</span>';
 
+      const cleanDigits = u.phone ? String(u.phone).replace(/\D/g, '') : '';
       const tr = document.createElement('tr');
-      tr.className = 'hover:bg-slate-50 transition whitespace-nowrap';
+      tr.className = 'even:bg-slate-50/40 hover:bg-sky-50/50 transition whitespace-nowrap';
       tr.innerHTML = `
-        <td class="p-3.5 font-bold text-slate-800">${u.name}</td>
-        <td class="p-3.5 font-mono text-slate-600 font-bold">${u.username}</td>
-        <td class="p-3.5">${roleBadge}</td>
-        <td class="p-3.5 font-mono text-slate-700">${u.phone ? `<a href="https://wa.me/${u.phone.replace(/\\D/g, '')}" target="_blank" class="text-emerald-600 font-bold hover:underline flex items-center"><i data-lucide="message-circle" class="w-3 h-3 mr-1"></i>${u.phone}</a>` : '-'}</td>
-        <td class="p-3.5 text-slate-600">${u.specialization || '-'}</td>
-        <td class="p-3.5 text-xs">${statusBadge}</td>
-        <td class="p-3.5 text-center">
+        <td class="px-3.5 py-3 font-bold text-slate-800 align-middle">${esc(u.name)}</td>
+        <td class="px-3.5 py-3 font-mono text-slate-600 font-bold align-middle">${esc(u.username)}</td>
+        <td class="px-3.5 py-3 align-middle">${roleBadge}</td>
+        <td class="px-3.5 py-3 font-mono text-slate-700 align-middle">${u.phone ? `<a href="https://wa.me/${cleanDigits}" target="_blank" class="text-emerald-600 font-bold hover:underline inline-flex items-center"><i data-lucide="message-circle" class="w-3 h-3 mr-1"></i>${esc(u.phone)}</a>` : '-'}</td>
+        <td class="px-3.5 py-3 text-slate-600 align-middle">${esc(u.specialization || '-')}</td>
+        <td class="px-3.5 py-3 text-xs align-middle">${statusBadge}</td>
+        <td class="px-3.5 py-3 text-center align-middle">
           <div class="flex items-center justify-center space-x-1.5">
             <button onclick="openEditUserModal(${u.id})" class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Edit Akun">
               <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
             </button>
-            <button onclick="deleteUser(${u.id}, '${u.name.replace(/'/g, "\\'")}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Nonaktifkan Akun">
+            <button onclick="deleteUserById(${u.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Akun">
               <i data-lucide="user-x" class="w-3.5 h-3.5"></i>
             </button>
           </div>
@@ -1763,6 +1621,11 @@ async function submitUserForm(e) {
   }
 }
 
+function deleteUserById(userId) {
+  const user = (allUsersData || []).find(u => u.id === userId);
+  return deleteUser(userId, user ? user.name : 'Pengguna Ini');
+}
+
 async function deleteUser(userId, userName) {
   const result = await Swal.fire({
     title: 'Hapus Akun Pengguna?',
@@ -1832,17 +1695,25 @@ async function loadTechnicians() {
     const tbody = document.getElementById('techLeaderboardBody');
     if (tbody) {
       tbody.innerHTML = '';
-      allTechnicians.forEach(t => {
-        const tr = document.createElement('tr');
-        tr.className = 'whitespace-nowrap hover:bg-slate-50 transition';
-        tr.innerHTML = `
-          <td class="p-3.5 font-bold text-slate-800 whitespace-nowrap">${t.name} <span class="text-[10px] text-slate-400">(@${t.username})</span></td>
-          <td class="p-3.5 text-slate-500 whitespace-nowrap">${t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT')}</td>
-          <td class="p-3.5 font-bold text-amber-600 whitespace-nowrap">${t.active_tickets || 0} Tiket</td>
-          <td class="p-3.5 font-bold text-emerald-600 whitespace-nowrap">${t.resolved_tickets || 0} Tiket Selesai</td>
+      if (!allTechnicians || allTechnicians.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="p-6 text-center text-slate-400 text-xs">Belum ada data teknisi IT aktif.</td>
+          </tr>
         `;
-        tbody.appendChild(tr);
-      });
+      } else {
+        allTechnicians.forEach(t => {
+          const tr = document.createElement('tr');
+          tr.className = 'even:bg-slate-50/40 whitespace-nowrap hover:bg-sky-50/50 transition';
+          tr.innerHTML = `
+            <td class="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap align-middle">${esc(t.name)} <span class="text-[10px] text-slate-400 font-mono">(@${esc(t.username)})</span></td>
+            <td class="px-3.5 py-3 text-slate-500 whitespace-nowrap align-middle">${esc(t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT'))}</td>
+            <td class="px-3.5 py-3 font-bold text-amber-600 whitespace-nowrap align-middle">${Number(t.active_tickets) || 0} Tiket</td>
+            <td class="px-3.5 py-3 font-bold text-emerald-600 whitespace-nowrap align-middle">${Number(t.resolved_tickets) || 0} Tiket Selesai</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      }
     }
   } catch (err) {
     console.error('Failed to load technicians:', err);
@@ -2023,7 +1894,7 @@ async function openTicketModal(ticketId) {
             iconBox.className = 'w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
             iconBox.textContent = '👔';
           }
-          lockText.innerHTML = `Tiket sedang dikerjakan oleh <b>${selectedTicketForModal.assigned_to_name}</b>. Sebagai Koordinator IT, Anda memiliki wewenang disposisi / alih tugas.`;
+          lockText.innerHTML = `Tiket sedang dikerjakan oleh <b>${esc(selectedTicketForModal.assigned_to_name)}</b>. Sebagai Koordinator IT, Anda memiliki wewenang disposisi / alih tugas.`;
         }
         if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
         if (actionContainer) actionContainer.classList.remove('hidden');
@@ -2049,35 +1920,101 @@ async function openTicketModal(ticketId) {
     document.getElementById('modalTitle').textContent = selectedTicketForModal.title;
     document.getElementById('modalDesc').textContent = selectedTicketForModal.description;
 
+    // Populate Photos (Foto Kendala & Foto Bukti Penyelesaian)
+    const photosSection = document.getElementById('modalPhotosSection');
+    const issuePhotoWrap = document.getElementById('modalIssuePhotoWrap');
+    const issuePhotoImg = document.getElementById('modalIssuePhoto');
+    const issuePhotoLink = document.getElementById('modalIssuePhotoLink');
+    const proofPhotoWrap = document.getElementById('modalProofPhotoWrap');
+    const proofPhotoImg = document.getElementById('modalProofPhotoPreview');
+    const proofPhotoLink = document.getElementById('modalProofPhotoLink');
+
+    let anyPhoto = false;
+    if (selectedTicketForModal.photo_url && issuePhotoWrap && issuePhotoImg) {
+      issuePhotoImg.src = selectedTicketForModal.photo_url;
+      if (issuePhotoLink) {
+        issuePhotoLink.onclick = (e) => {
+          e.preventDefault();
+          openImageLightbox(selectedTicketForModal.photo_url, 'Foto Kendala - ' + selectedTicketForModal.ticket_no);
+        };
+      }
+      issuePhotoWrap.classList.remove('hidden');
+      anyPhoto = true;
+    } else if (issuePhotoWrap) {
+      issuePhotoWrap.classList.add('hidden');
+    }
+
+    if (selectedTicketForModal.proof_photo_url && proofPhotoWrap && proofPhotoImg) {
+      proofPhotoImg.src = selectedTicketForModal.proof_photo_url;
+      if (proofPhotoLink) {
+        proofPhotoLink.onclick = (e) => {
+          e.preventDefault();
+          openImageLightbox(selectedTicketForModal.proof_photo_url, 'Foto Bukti Penyelesaian - ' + selectedTicketForModal.ticket_no);
+        };
+      }
+      proofPhotoWrap.classList.remove('hidden');
+      anyPhoto = true;
+    } else if (proofPhotoWrap) {
+      proofPhotoWrap.classList.add('hidden');
+    }
+
+    if (photosSection) {
+      if (anyPhoto) photosSection.classList.remove('hidden');
+      else photosSection.classList.add('hidden');
+    }
+
     document.getElementById('modalAssignTech').value = selectedTicketForModal.assigned_to || '';
     document.getElementById('modalNewStatus').value = selectedTicketForModal.status || 'in_progress';
     document.getElementById('modalResolutionNotes').value = selectedTicketForModal.resolution_notes || '';
+    const proofFileInput = document.getElementById('modalProofPhoto');
+    if (proofFileInput) proofFileInput.value = '';
 
     // Render Modal Logs
     const logsList = document.getElementById('modalLogsList');
     logsList.innerHTML = '';
-    (data.logs || []).forEach(l => {
-      const item = document.createElement('div');
-      item.className = 'bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-start';
-      item.innerHTML = `
-        <div>
-          <span class="font-bold text-slate-800">${l.action}</span>
-          <p class="text-slate-600 mt-0.5">${l.notes || '-'}</p>
-        </div>
-        <span class="text-[10px] text-slate-400">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-      `;
-      logsList.appendChild(item);
-    });
+    const logs = data.logs || [];
+    if (logs.length === 0) {
+      logsList.innerHTML = '<div class="text-slate-400 text-xs italic p-2 bg-slate-50 rounded-xl border border-slate-100">Belum ada riwayat aktivitas tercatat.</div>';
+    } else {
+      logs.forEach(l => {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-start gap-2';
+        item.innerHTML = `
+          <div class="min-w-0">
+            <span class="font-bold text-slate-800">${esc(l.action)}</span>
+            <p class="text-slate-600 mt-0.5 break-words">${esc(l.notes || '-')}</p>
+            <span class="text-[10px] text-slate-400 block mt-0.5">Oleh: ${esc(l.user_name)}</span>
+          </div>
+          <span class="text-[10px] text-slate-400 shrink-0">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+        `;
+        logsList.appendChild(item);
+      });
+    }
 
     document.getElementById('ticketModal').classList.remove('hidden');
     lucide.createIcons();
   } catch (err) {
     console.error(err);
+    Swal.fire('Gagal Memuat Tiket', err.message || 'Detail tiket tidak dapat dibuka.', 'error');
   }
+}
+
+function openImageLightbox(src, caption) {
+  if (!src) return;
+  Swal.fire({
+    title: caption || 'Lampiran Foto',
+    imageUrl: src,
+    imageAlt: caption || 'Lampiran Foto',
+    width: 640,
+    confirmButtonText: 'Tutup',
+    confirmButtonColor: '#0284c7'
+  });
 }
 
 function closeModal() {
   document.getElementById('ticketModal').classList.add('hidden');
+  const proofFileInput = document.getElementById('modalProofPhoto');
+  if (proofFileInput) proofFileInput.value = '';
   selectedTicketForModal = null;
 }
 
@@ -2274,24 +2211,24 @@ function loadTechnicianTickets() {
     card.className = 'bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3';
     card.innerHTML = `
       <div class="flex items-center justify-between">
-        <span class="font-mono font-bold text-xs text-sky-700">${t.ticket_no}</span>
+        <span class="font-mono font-bold text-xs text-sky-700">${esc(t.ticket_no)}</span>
         <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.priority === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}">
-          ${t.priority}
+          ${esc(t.priority)}
         </span>
       </div>
       <div>
-        <h3 class="font-bold text-slate-800 text-sm">${t.title}</h3>
-        <p class="text-xs text-slate-500 mt-1">${t.description}</p>
+        <h3 class="font-bold text-slate-800 text-sm">${esc(t.title)}</h3>
+        <p class="text-xs text-slate-500 mt-1">${esc(t.description)}</p>
       </div>
       <div class="p-3 bg-slate-50 rounded-xl text-xs space-y-1">
-        <p><strong>🏥 Lokasi:</strong> ${t.room_name}</p>
-        <p><strong>👤 Pelapor:</strong> ${t.reporter_name} (${t.reporter_phone})</p>
+        <p><strong>🏥 Lokasi:</strong> ${esc(t.room_name)}</p>
+        <p><strong>👤 Pelapor:</strong> ${esc(t.reporter_name)} (${esc(t.reporter_phone)})</p>
       </div>
       <div class="pt-2 flex flex-wrap gap-2">
         <button onclick="openTicketModal(${t.id})" class="flex-1 min-w-[130px] py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition">
           Perbarui Tindakan / Selesai
         </button>
-        <button onclick="sendDirectWaFromCard('${t.ticket_no}', '${t.room_name}', '${t.reporter_name}', '${t.reporter_phone}', '${t.title}', 'done')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm" title="Kirim WA Selesai">
+        <button onclick="sendDirectWaByTicketId(${t.id}, 'done')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm" title="Kirim WA Selesai">
           <i data-lucide="message-circle" class="w-4 h-4"></i>
           <span>WA Selesai</span>
         </button>
@@ -2301,6 +2238,12 @@ function loadTechnicianTickets() {
   });
 
   lucide.createIcons();
+}
+
+function sendDirectWaByTicketId(ticketId, type) {
+  const t = (allTickets || []).find(item => item.id === ticketId) || selectedTicketForModal;
+  if (!t) return;
+  sendDirectWaFromCard(t.ticket_no, t.room_name, t.reporter_name, t.reporter_phone, t.title, type);
 }
 
 // Kirim Pesan WhatsApp Langsung dari HP Teknisi (100% Gratis Tanpa Bot)
@@ -2531,18 +2474,18 @@ function generateClientPrintHtml(startDate, endDate) {
   const rowsHtml = tickets.map((t, idx) => `
     <tr>
       <td style="text-align: center;">${idx + 1}</td>
-      <td style="font-weight: bold; white-space: nowrap;">${t.ticket_no}</td>
+      <td style="font-weight: bold; white-space: nowrap;">${esc(t.ticket_no)}</td>
       <td style="white-space: nowrap; text-align: center; font-size: 8pt;">${new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-      <td><strong>${t.room_name}</strong></td>
-      <td>${t.category_name}</td>
-      <td>${t.reporter_name}</td>
+      <td><strong>${esc(t.room_name)}</strong></td>
+      <td>${esc(t.category_name)}</td>
+      <td>${esc(t.reporter_name)}</td>
       <td style="text-align: center;">
-        <span class="badge ${t.priority || 'medium'}">${(t.priority || 'medium').toUpperCase()}</span>
+        <span class="badge ${esc(t.priority || 'medium')}">${esc((t.priority || 'medium').toUpperCase())}</span>
       </td>
-      <td><strong>${t.title}</strong><br><small style="color:#64748b;">${(t.description || '').substring(0, 80)}...</small></td>
-      <td>${t.assigned_to_name || '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
+      <td><strong>${esc(t.title)}</strong><br><small style="color:#64748b;">${esc((t.description || '').substring(0, 80))}...</small></td>
+      <td>${t.assigned_to_name ? esc(t.assigned_to_name) : '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
       <td style="text-align: center;">
-        <span class="status-badge ${t.status}">${t.status.toUpperCase()}</span>
+        <span class="status-badge ${esc(t.status)}">${esc(String(t.status || '').toUpperCase())}</span>
       </td>
     </tr>
   `).join('');
@@ -2765,22 +2708,97 @@ function generateClientPrintHtml(startDate, endDate) {
 </html>`;
 }
 
-// Export Excel with date filter & resolved full URL
-function exportExcel() {
+// Export Excel (.xlsx) directly client-side using ExcelJS (works 100% on Cloud & Offline)
+async function exportExcel() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
-  let url = '/api/reports/export-excel';
-  const params = [];
-  if (start) params.push(`startDate=${encodeURIComponent(start)}`);
-  if (end) params.push(`endDate=${encodeURIComponent(end)}`);
-  if (params.length > 0) url += `?${params.join('&')}`;
 
-  const customBase = localStorage.getItem('server_api_url');
-  let fullUrl = url;
-  if (customBase && url.startsWith('/api/')) {
-    fullUrl = customBase.replace(/\/+$/, '') + url;
+  let tickets = (allTickets || []).slice();
+  if (start) {
+    const sTime = new Date(start + 'T00:00:00').getTime();
+    tickets = tickets.filter(t => new Date(t.created_at).getTime() >= sTime);
   }
-  window.location.href = fullUrl;
+  if (end) {
+    const eTime = new Date(end + 'T23:59:59').getTime();
+    tickets = tickets.filter(t => new Date(t.created_at).getTime() <= eTime);
+  }
+
+  Swal.fire({ title: 'Menyiapkan File Excel...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+
+  try {
+    if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.0');
+    }
+    if (!window.ExcelJS) {
+      throw new Error('Komponen pembuat Excel gagal dimuat');
+    }
+
+    const workbook = new window.ExcelJS.Workbook();
+    workbook.creator = 'SIM-ETIKET IT RSUD Labuha';
+    const sheet = workbook.addWorksheet('Rekap E-Tiket IT');
+
+    sheet.columns = [
+      { header: 'No', key: 'no', width: 6 },
+      { header: 'Nomor Tiket', key: 'ticket_no', width: 20 },
+      { header: 'Waktu Lapor', key: 'created_at', width: 20 },
+      { header: 'Ruangan / Unit', key: 'room_name', width: 28 },
+      { header: 'Kategori', key: 'category_name', width: 24 },
+      { header: 'Prioritas', key: 'priority', width: 12 },
+      { header: 'Pelapor', key: 'reporter_name', width: 22 },
+      { header: 'No. WhatsApp', key: 'reporter_phone', width: 16 },
+      { header: 'Keluhan', key: 'description', width: 40 },
+      { header: 'Teknisi Bertugas', key: 'assigned_to_name', width: 22 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Catatan Penyelesaian', key: 'resolution_notes', width: 32 }
+    ];
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0284C7' } };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+    headerRow.height = 24;
+
+    tickets.forEach((t, idx) => {
+      sheet.addRow({
+        no: idx + 1,
+        ticket_no: t.ticket_no || '-',
+        created_at: t.created_at ? new Date(t.created_at).toLocaleString('id-ID') : '-',
+        room_name: t.room_name || '-',
+        category_name: t.category_name || '-',
+        priority: String(t.priority || 'medium').toUpperCase(),
+        reporter_name: t.reporter_name || '-',
+        reporter_phone: t.reporter_phone || '-',
+        description: t.description || t.title || '-',
+        assigned_to_name: t.assigned_to_name || 'Belum Ditugaskan',
+        status: String(t.status || 'open').toUpperCase(),
+        resolution_notes: t.resolution_notes || t.pending_reason || '-'
+      });
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const blobUrl = URL.createObjectURL(blob);
+    const filename = `Rekap-ETiket-RSUD-Labuha-${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+    Swal.fire({
+      icon: 'success',
+      title: 'File Excel Berhasil Dibuat!',
+      text: `${tickets.length} tiket diekspor ke ${filename}.`,
+      timer: 2200,
+      showConfirmButton: false
+    });
+  } catch (err) {
+    console.error('Export Excel error:', err);
+    Swal.fire('Gagal Ekspor Excel', err.message || 'Terjadi kesalahan saat membuat file Excel.', 'error');
+  }
 }
 
 // Print Official HTML / PDF (Instantly opens in 0ms with local generator)
@@ -2828,6 +2846,14 @@ function printReportIframe() {
   }
 }
 
+function getDefaultPublicOrigin() {
+  const origin = window.location.origin || '';
+  if (window.Capacitor && origin.includes('localhost')) {
+    return 'https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev';
+  }
+  return origin;
+}
+
 // Load Gateway & Server Settings
 async function loadGatewaySettings() {
   try {
@@ -2836,7 +2862,10 @@ async function loadGatewaySettings() {
 
     const serverUrlInput = document.getElementById('cfg_app_server_url');
     if (serverUrlInput) {
-      serverUrlInput.value = cfg.app_server_url || window.location.origin;
+      const savedOrigin = (cfg.app_server_url || '').trim();
+      serverUrlInput.value = (savedOrigin && !savedOrigin.includes('localhost') && !savedOrigin.includes('trycloudflare'))
+        ? savedOrigin
+        : getDefaultPublicOrigin();
     }
 
     document.getElementById('cfg_wa_enabled').checked = cfg.wa_gateway_enabled === '1';
@@ -2862,7 +2891,7 @@ async function loadGatewaySettings() {
 function setQuickServerIp() {
   const input = document.getElementById('cfg_app_server_url');
   if (input) {
-    input.value = window.location.origin;
+    input.value = getDefaultPublicOrigin();
   }
 }
 
@@ -2895,14 +2924,6 @@ async function saveGatewaySettings() {
       body: JSON.stringify(payload)
     });
     if (!res.ok) throw new Error('Gagal menyimpan pengaturan');
-
-    if (payload.app_server_url && window.Capacitor?.Plugins?.EtiketNative) {
-      let targetUrl = payload.app_server_url;
-      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-        targetUrl = `http://${targetUrl}`;
-      }
-      window.Capacitor.Plugins.EtiketNative.configure({ serverUrl: targetUrl }).catch(() => { });
-    }
 
     Swal.fire({
       icon: 'success',
@@ -3129,22 +3150,38 @@ async function loadNotificationLogs() {
     const tbody = document.getElementById('logsTableBody');
     tbody.innerHTML = '';
 
+    if (!logs || logs.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="p-8 text-center text-slate-400 text-xs font-sans">
+            Belum ada catatan log notifikasi tersimpan di Supabase.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
     logs.forEach(l => {
       const tr = document.createElement('tr');
-      tr.className = 'whitespace-nowrap hover:bg-slate-50 transition border-b border-slate-100';
+      tr.className = 'even:bg-slate-50/40 whitespace-nowrap hover:bg-sky-50/50 transition border-b border-slate-100';
       const badgeStatus = {
         sent: '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">SENT</span>',
-        simulated: '<span class="bg-sky-100 text-sky-700 px-2 py-0.5 rounded text-[10px] font-bold">SIMULATED (LOGGED)</span>',
+        simulated: '<span class="bg-sky-100 text-sky-700 px-2 py-0.5 rounded text-[10px] font-bold">LOGGED (CLOUD)</span>',
         failed: '<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold">FAILED</span>'
-      }[l.status] || l.status;
+      }[l.status] || `<span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">${esc(l.status)}</span>`;
+
+      const timeStr = l.created_at
+        ? new Date(l.created_at).toLocaleString('id-ID', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '-';
+      const msgSnippet = l.message ? String(l.message).substring(0, 60) + (l.message.length > 60 ? '...' : '') : '-';
 
       tr.innerHTML = `
-        <td class="p-3.5 text-slate-500 whitespace-nowrap">${new Date(l.created_at).toLocaleTimeString('id-ID')}</td>
-        <td class="p-3.5 font-bold uppercase text-slate-700 whitespace-nowrap">${l.channel}</td>
-        <td class="p-3.5 font-semibold text-slate-800 whitespace-nowrap">${l.recipient}</td>
-        <td class="p-3.5 text-slate-600 whitespace-nowrap">${l.title || '-'}</td>
-        <td class="p-3.5 max-w-xs truncate text-slate-500">${l.message.substring(0, 60)}...</td>
-        <td class="p-3.5 whitespace-nowrap">${badgeStatus}</td>
+        <td class="px-3.5 py-3 text-slate-500 whitespace-nowrap align-middle">${esc(timeStr)}</td>
+        <td class="px-3.5 py-3 font-bold uppercase text-slate-700 whitespace-nowrap align-middle">${esc(l.channel)}</td>
+        <td class="px-3.5 py-3 font-semibold text-slate-800 whitespace-nowrap align-middle">${esc(l.recipient)}</td>
+        <td class="px-3.5 py-3 text-slate-600 whitespace-nowrap align-middle">${esc(l.title || '-')}</td>
+        <td class="px-3.5 py-3 max-w-xs truncate text-slate-500 align-middle" title="${esc(l.message || '')}">${esc(msgSnippet)}</td>
+        <td class="px-3.5 py-3 whitespace-nowrap align-middle">${badgeStatus}</td>
       `;
       tbody.appendChild(tr);
     });

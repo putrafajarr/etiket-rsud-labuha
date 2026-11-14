@@ -155,6 +155,11 @@ public class TicketMonitorService extends Service {
             return;
         }
         serverUrl = serverUrl.trim();
+        String lowerServer = serverUrl.toLowerCase();
+        if (lowerServer.contains("workers.dev") || lowerServer.contains("://localhost") || lowerServer.contains("://127.0.0.1")) {
+            pollSupabaseDirectFallback(lastSeenId);
+            return;
+        }
         if (serverUrl.endsWith("/")) {
             serverUrl = serverUrl.substring(0, serverUrl.length() - 1);
         }
