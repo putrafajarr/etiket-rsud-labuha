@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.2">
+  <link rel="stylesheet" href="/css/custom.css?v=4.3">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -633,20 +633,35 @@
 
       <!-- TAB 4: MASTER RUANGAN & QR CODES -->
       <section id="view-rooms" class="hidden space-y-6">
-        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h2 class="font-bold text-slate-800 text-sm sm:text-base">Master Ruangan & Stiker QR Code</h2>
-            <p class="text-xs text-slate-500">Kelola daftar poli, bangsal, dan instalasi penunjang RSUD Labuha</p>
+        <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="font-bold text-slate-800 text-sm sm:text-base">Master Ruangan &amp; Stiker QR Code</h2>
+              <p class="text-xs text-slate-500">Kelola daftar poli, bangsal, nama gedung, dan cetak stiker QR per unit maupun per gedung</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button onclick="openAddRoomModal()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-md shadow-sky-600/20">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>Tambah Unit Baru</span>
+              </button>
+              <button onclick="openFilteredQrPage()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-md">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+                <span>Cetak Stiker QR</span>
+              </button>
+            </div>
           </div>
-          <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-            <button onclick="openAddRoomModal()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-700 hover:to-teal-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-md shadow-sky-600/20">
-              <i data-lucide="plus-circle" class="w-4 h-4"></i>
-              <span>Tambah Unit Baru</span>
-            </button>
-            <a href="/qrcodes.html" target="_blank" class="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 hover:bg-black text-white font-bold rounded-xl text-xs transition flex items-center justify-center space-x-1.5 shadow-md">
-              <i data-lucide="printer" class="w-4 h-4"></i>
-              <span>Cetak Stiker QR</span>
-            </a>
+
+          <!-- Pencarian Unit & Filter Gedung -->
+          <div class="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <div class="relative">
+              <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input type="text" id="roomSearchInput" oninput="renderRoomsGrid()" placeholder="Cari nama ruangan, kode, atau gedung..." class="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none">
+            </div>
+            <div>
+              <select id="roomBuildingFilter" onchange="renderRoomsGrid()" class="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50/60 focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none font-semibold text-slate-700">
+                <option value="">🏢 Semua Gedung RSUD</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1171,18 +1186,22 @@
         </div>
 
         <div>
-          <label class="block font-bold text-slate-700 mb-1">Nama Gedung</label>
-          <select id="newRoomBuilding" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-xs bg-white">
-            <option value="Gedung Rawat Jalan">Gedung Rawat Jalan</option>
-            <option value="Gedung Rawat Inap">Gedung Rawat Inap</option>
-            <option value="Gedung Utama">Gedung Utama</option>
-            <option value="Gedung Penunjang">Gedung Penunjang</option>
-            <option value="Gedung Rawat Khusus">Gedung Rawat Khusus</option>
-            <option value="Gedung Bedah">Gedung Bedah</option>
-            <option value="Gedung VIP">Gedung VIP</option>
-            <option value="Gedung Administrasi">Gedung Administrasi</option>
-            <option value="Gedung Manajemen">Gedung Manajemen</option>
-          </select>
+          <label class="block font-bold text-slate-700 mb-1">Nama Gedung <span class="text-sky-600 font-normal">(Pilih atau ketik baru)</span></label>
+          <input type="text" id="newRoomBuilding" list="buildingSuggestions" placeholder="Contoh: Gedung Rawat Jalan / Gedung PONEK / Gedung Kebidanan" class="w-full p-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-sky-500 text-xs bg-white">
+          <datalist id="buildingSuggestions">
+            <option value="Gedung Rawat Jalan">
+            <option value="Gedung Rawat Inap">
+            <option value="Gedung Utama">
+            <option value="Gedung Penunjang">
+            <option value="Gedung Rawat Khusus">
+            <option value="Gedung Bedah">
+            <option value="Gedung VIP">
+            <option value="Gedung Kebidanan / PONEK">
+            <option value="Gedung IGD">
+            <option value="Gedung Administrasi">
+            <option value="Gedung Manajemen">
+          </datalist>
+          <span class="text-[10px] text-slate-400 block mt-0.5">Pilih dari daftar atau ketik manual nama gedung di RSUD Labuha.</span>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1383,11 +1402,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.2"></script>
-  <script src="/js/bcrypt.min.js?v=4.2"></script>
-  <script src="/js/supabase-client.js?v=4.2"></script>
-  <script src="/js/sound.js?v=4.2"></script>
-  <script src="/js/app.js?v=4.2"></script>
+  <script src="/js/qrcode.min.js?v=4.3"></script>
+  <script src="/js/bcrypt.min.js?v=4.3"></script>
+  <script src="/js/supabase-client.js?v=4.3"></script>
+  <script src="/js/sound.js?v=4.3"></script>
+  <script src="/js/app.js?v=4.3"></script>
 </body>
 </html>
 

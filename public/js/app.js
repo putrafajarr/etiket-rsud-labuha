@@ -1280,6 +1280,68 @@ function renderTickets() {
   lucide.createIcons();
 }
 
+const DEFAULT_BUILDING_OPTIONS = [
+  'Gedung Rawat Jalan',
+  'Gedung Rawat Inap',
+  'Gedung Utama',
+  'Gedung Penunjang',
+  'Gedung Rawat Khusus',
+  'Gedung Bedah',
+  'Gedung VIP',
+  'Gedung Kebidanan / PONEK',
+  'Gedung IGD',
+  'Gedung Administrasi',
+  'Gedung Manajemen'
+];
+
+function getKnownBuildingNames() {
+  const seen = new Map();
+  DEFAULT_BUILDING_OPTIONS.forEach(b => {
+    const clean = String(b || '').trim();
+    if (clean) seen.set(clean.toLowerCase(), clean);
+  });
+  (allRooms || []).forEach(r => {
+    const clean = String(r.building || '').trim();
+    if (clean && !seen.has(clean.toLowerCase())) {
+      seen.set(clean.toLowerCase(), clean);
+    }
+  });
+  return Array.from(seen.values());
+}
+
+function populateBuildingOptions() {
+  const known = getKnownBuildingNames();
+  const datalist = document.getElementById('buildingSuggestions');
+  if (datalist) {
+    datalist.innerHTML = known.map(b => `<option value="${esc(b)}"></option>`).join('');
+  }
+
+  const filterSelect = document.getElementById('roomBuildingFilter');
+  if (filterSelect) {
+    const prev = filterSelect.value || '';
+    const dbBuildings = Array.from(new Set((allRooms || []).map(r => String(r.building || '').trim()).filter(Boolean)))
+      .sort((a, b) => a.localeCompare(b, 'id'));
+    filterSelect.innerHTML = '<option value="">🏢 Semua Gedung RSUD</option>';
+    dbBuildings.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b;
+      opt.textContent = `🏢 ${b}`;
+      filterSelect.appendChild(opt);
+    });
+    if (prev && dbBuildings.includes(prev)) filterSelect.value = prev;
+  }
+}
+
+function openFilteredQrPage() {
+  const b = (document.getElementById('roomBuildingFilter')?.value || '').trim();
+  const target = b ? `/qrcodes.html?building=${encodeURIComponent(b)}` : '/qrcodes.html';
+  if (window.Capacitor?.isNativePlatform?.()) {
+    window.location.href = target;
+  } else {
+    window.open(target, '_blank');
+  }
+}
+
 // Load Rooms Master & Filter Options
 async function loadRoomsMaster() {
   try {
@@ -1294,71 +1356,102 @@ async function loadRoomsMaster() {
       allRooms.forEach(r => {
         const opt = document.createElement('option');
         opt.value = String(r.id);
-        opt.textContent = r.name;
+        opt.textContent = r.building ? `${r.name} (${r.building})` : r.name;
         filterSelect.appendChild(opt);
       });
       if (prevSelected) filterSelect.value = prevSelected;
     }
 
-    // Rooms Grid Tab
-    const roomsGrid = document.getElementById('roomsGrid');
-    roomsGrid.innerHTML = '';
-
-    if (!allRooms || allRooms.length === 0) {
-      roomsGrid.innerHTML = `
-        <div class="col-span-full py-12 px-4 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200">
-          <div class="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl font-bold shadow-sm">
-            🏢
-          </div>
-          <h3 class="font-bold text-slate-800 text-sm">Belum Ada Data Ruangan / Unit</h3>
-          <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Semua data unit lama telah dibersihkan. Anda sekarang dapat menambahkan unit/ruangan RSUD Labuha baru dari nol.</p>
-          <button onclick="openAddRoomModal()" class="mt-4 px-4 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white font-bold rounded-xl text-xs transition inline-flex items-center space-x-1.5 shadow-md shadow-sky-600/20 active:scale-95">
-            <i data-lucide="plus-circle" class="w-4 h-4"></i>
-            <span>Tambah Unit Pertama</span>
-          </button>
-        </div>
-      `;
-      lucide.createIcons();
-      return;
-    }
-
-    allRooms.forEach(r => {
-      const card = document.createElement('div');
-      card.className = 'bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3';
-      card.innerHTML = `
-        <div>
-          <div class="flex items-center justify-between">
-            <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${esc(r.code)}</span>
-            <span class="text-[10px] text-slate-400 font-semibold">${esc(r.floor || 'Lantai 1')}</span>
-          </div>
-          <h4 class="font-bold text-slate-800 text-xs mt-2">${esc(r.name)}</h4>
-          <p class="text-[11px] text-slate-400">${esc(r.building || 'Gedung RSUD')}</p>
-        </div>
-        <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
-          <div class="flex items-center space-x-1.5">
-            <a href="/lapor.html?room=${encodeURIComponent(r.code)}&id=${r.id}" target="_blank" class="text-xs text-sky-600 font-bold hover:underline flex items-center">
-              <i data-lucide="external-link" class="w-3.5 h-3.5 mr-1"></i> Form
-            </a>
-            <button onclick="previewRoomQR(${r.id})" class="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded text-[10px] font-bold text-slate-700">
-              QR
-            </button>
-          </div>
-          <div class="flex items-center space-x-1">
-            <button onclick="openEditRoomModal(${r.id})" class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Edit Unit">
-              <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
-            </button>
-            <button onclick="deleteRoomById(${r.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Unit">
-              <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            </button>
-          </div>
-        </div>
-      `;
-      roomsGrid.appendChild(card);
-    });
-    lucide.createIcons();
+    populateBuildingOptions();
+    renderRoomsGrid();
   } catch (err) {
     console.error('Failed to load rooms:', err);
   }
+}
+
+function renderRoomsGrid() {
+  const roomsGrid = document.getElementById('roomsGrid');
+  if (!roomsGrid) return;
+  roomsGrid.innerHTML = '';
+
+  if (!allRooms || allRooms.length === 0) {
+    roomsGrid.innerHTML = `
+      <div class="col-span-full py-12 px-4 text-center bg-white rounded-2xl border-2 border-dashed border-slate-200">
+        <div class="w-14 h-14 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl font-bold shadow-sm">
+          🏢
+        </div>
+        <h3 class="font-bold text-slate-800 text-sm">Belum Ada Data Ruangan / Unit</h3>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">Semua data unit lama telah dibersihkan. Anda sekarang dapat menambahkan unit/ruangan RSUD Labuha baru dari nol.</p>
+        <button onclick="openAddRoomModal()" class="mt-4 px-4 py-2.5 bg-gradient-to-r from-sky-600 to-teal-600 text-white font-bold rounded-xl text-xs transition inline-flex items-center space-x-1.5 shadow-md shadow-sky-600/20 active:scale-95">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Tambah Unit Pertama</span>
+        </button>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+
+  const q = (document.getElementById('roomSearchInput')?.value || '').trim().toLowerCase();
+  const bFilter = (document.getElementById('roomBuildingFilter')?.value || '').trim();
+  const filtered = allRooms.filter(r => {
+    if (bFilter && String(r.building || '').trim() !== bFilter) return false;
+    if (!q) return true;
+    const hay = `${r.name || ''} ${r.code || ''} ${r.building || ''} ${r.floor || ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    roomsGrid.innerHTML = `
+      <div class="col-span-full py-10 px-4 text-center bg-white rounded-2xl border border-dashed border-slate-200">
+        <p class="text-xs font-bold text-slate-600">Tidak ada unit yang cocok dengan pencarian/filter gedung.</p>
+        <button onclick="document.getElementById('roomSearchInput').value=''; document.getElementById('roomBuildingFilter').value=''; renderRoomsGrid();" class="mt-3 px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition">Tampilkan Semua Unit</button>
+      </div>
+    `;
+    return;
+  }
+
+  filtered.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3';
+    card.innerHTML = `
+      <div>
+        <div class="flex items-center justify-between gap-1">
+          <span class="text-[10px] font-mono font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded">${esc(r.code)}</span>
+          <span class="text-[10px] text-slate-400 font-semibold truncate">${esc(r.floor || 'Lantai 1')}</span>
+        </div>
+        <h4 class="font-bold text-slate-800 text-xs mt-2 leading-snug">${esc(r.name)}</h4>
+        <p class="text-[11px] font-semibold text-sky-700 mt-1 flex items-center gap-1">
+          <i data-lucide="building-2" class="w-3 h-3 shrink-0"></i>
+          <span class="truncate">${esc(r.building || 'Gedung RSUD')}</span>
+        </p>
+      </div>
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-1">
+        <div class="flex items-center flex-wrap gap-1">
+          <a href="/lapor.html?room=${encodeURIComponent(r.code)}&id=${r.id}" target="_blank" class="text-[11px] text-sky-600 font-bold hover:underline flex items-center px-1.5 py-0.5">
+            <i data-lucide="external-link" class="w-3 h-3 mr-1"></i> Form
+          </a>
+          <button onclick="previewRoomQR(${r.id})" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-md text-[10px] font-bold text-slate-700 transition" title="Preview & Unduh QR">
+            QR
+          </button>
+          <button onclick="printSingleRoomQR(${r.id})" class="px-2 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-md text-[10px] font-bold transition inline-flex items-center gap-1" title="Cetak Stiker Unit Ini">
+            <i data-lucide="printer" class="w-3 h-3"></i>
+            <span>Cetak</span>
+          </button>
+        </div>
+        <div class="flex items-center space-x-0.5 shrink-0">
+          <button onclick="openEditRoomModal(${r.id})" class="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition" title="Edit Unit">
+            <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
+          </button>
+          <button onclick="deleteRoomById(${r.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Hapus Unit">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    roomsGrid.appendChild(card);
+  });
+  lucide.createIcons();
 }
 
 // Auto-generate standardized room/unit code based on room name & sequence
@@ -1426,6 +1519,7 @@ function onRoomNameInput(val) {
 
 // Modal Tambah / Edit Ruangan / Unit
 function openAddRoomModal() {
+  populateBuildingOptions();
   document.getElementById('editRoomId').value = '';
   document.getElementById('roomModalTitle').textContent = 'Tambah Ruangan / Unit RSUD';
   document.getElementById('addRoomForm').reset();
@@ -1443,6 +1537,7 @@ function openEditRoomModal(roomId) {
   const room = allRooms.find(r => r.id === roomId);
   if (!room) return;
 
+  populateBuildingOptions();
   document.getElementById('editRoomId').value = room.id;
   document.getElementById('roomModalTitle').textContent = 'Edit Ruangan / Unit RSUD';
   document.getElementById('newRoomName').value = room.name;
@@ -1451,7 +1546,7 @@ function openEditRoomModal(roomId) {
     codeEl.value = room.code;
     codeEl.readOnly = true;
   }
-  document.getElementById('newRoomBuilding').value = room.building || 'Gedung Rawat Jalan';
+  document.getElementById('newRoomBuilding').value = room.building || '';
   document.getElementById('newRoomFloor').value = room.floor || '';
   document.getElementById('newRoomPic').value = room.pic_name || '';
   document.getElementById('newRoomPhone').value = room.pic_phone || '';
@@ -1472,7 +1567,7 @@ async function submitAddRoom(e) {
   const editId = document.getElementById('editRoomId').value;
   const name = document.getElementById('newRoomName').value.trim();
   const code = document.getElementById('newRoomCode').value.trim().toUpperCase();
-  const building = document.getElementById('newRoomBuilding').value;
+  const building = (document.getElementById('newRoomBuilding').value || '').trim();
   const floor = document.getElementById('newRoomFloor').value.trim();
   const pic_name = document.getElementById('newRoomPic').value.trim();
   const pic_phone = document.getElementById('newRoomPhone').value.trim();
@@ -1741,23 +1836,83 @@ async function deleteUser(userId, userName) {
   }
 }
 
+async function fetchSingleRoomQr(roomId) {
+  const res = await fetch(`/api/rooms/${roomId}/qr`);
+  const data = await res.json();
+  if (!res.ok || !data.room) {
+    throw new Error(data.error || 'Gagal memuat QR unit');
+  }
+  return Object.assign({}, data.room, {
+    qrDataUrl: data.qrDataUrl,
+    reportUrl: data.reportUrl
+  });
+}
+
+async function printSingleRoomQR(roomId) {
+  try {
+    const stickerRoom = await fetchSingleRoomQr(roomId);
+    if (typeof window.printRoomStickersHtml === 'function') {
+      await window.printRoomStickersHtml([stickerRoom], `Stiker QR - ${stickerRoom.name}`);
+    } else {
+      window.open(`/qrcodes.html?room_id=${encodeURIComponent(roomId)}`, '_blank');
+    }
+  } catch (err) {
+    console.error(err);
+    Swal.fire('Gagal Mencetak QR', err.message || 'Tidak dapat memuat QR ruangan', 'error');
+  }
+}
+
+async function downloadRoomQR(roomId) {
+  try {
+    const stickerRoom = await fetchSingleRoomQr(roomId);
+    const filename = `QR-${stickerRoom.code || 'UNIT'}-${stickerRoom.name || 'RSUD'}.png`;
+    if (typeof window.downloadQrPng === 'function') {
+      const res = await window.downloadQrPng(stickerRoom.qrDataUrl, filename);
+      if (res?.native) {
+        Swal.fire({
+          icon: 'success',
+          title: 'QR PNG Tersimpan',
+          text: `File ${res.filename} berhasil disimpan di perangkat.`,
+          timer: 1800,
+          showConfirmButton: false
+        });
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    Swal.fire('Gagal Unduh QR', err.message || 'Tidak dapat mengunduh QR PNG', 'error');
+  }
+}
+
 // Preview single room QR Code
 async function previewRoomQR(roomId) {
   try {
-    const res = await fetch(`/api/rooms/${roomId}/qr`);
-    const data = await res.json();
+    const item = await fetchSingleRoomQr(roomId);
+    const buildingBadge = esc(item.building || 'Gedung RSUD Labuha') + (item.floor ? ` • ${esc(item.floor)}` : '');
     Swal.fire({
-      title: data.room.name,
+      title: esc(item.name),
       html: `
-        <img src="${data.qrDataUrl}" class="w-48 h-48 mx-auto rounded-xl border p-2 my-2">
-        <p class="text-xs text-slate-500 font-mono font-bold">${data.room.code}</p>
-        <p class="text-xs text-slate-600 mt-2">Scan QR Code ini untuk langsung membuka formulir pelaporan ruangan ini.</p>
+        <div class="inline-block px-3 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-[11px] font-bold mb-2">
+          🏢 ${buildingBadge}
+        </div>
+        <img src="${item.qrDataUrl}" alt="${esc(item.code)}" class="w-48 h-48 mx-auto rounded-xl border border-slate-200 p-2 my-1 shadow-sm">
+        <p class="text-xs text-slate-600 font-mono font-bold mt-1">${esc(item.code)}</p>
+        <p class="text-[11px] text-slate-500 mt-2">Scan QR Code ini untuk membuka formulir pelaporan khusus unit ini.</p>
+        <div class="mt-4 flex flex-wrap justify-center gap-2">
+          <button type="button" onclick="printSingleRoomQR(${item.id})" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm">
+            🖨️ Cetak Stiker Unit Ini
+          </button>
+          <button type="button" onclick="downloadRoomQR(${item.id})" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-sm">
+            ⬇️ Download PNG
+          </button>
+        </div>
       `,
       confirmButtonText: 'Tutup',
-      confirmButtonColor: '#0284c7'
+      confirmButtonColor: '#475569'
     });
   } catch (err) {
     console.error(err);
+    Swal.fire('Error', err.message || 'Gagal memuat QR Code ruangan', 'error');
   }
 }
 

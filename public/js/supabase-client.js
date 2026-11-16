@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.2');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.3');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.2').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.3').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -1292,6 +1292,166 @@
     return handleSupabaseApi(apiPath, options);
   }
 
+  function buildRoomStickerPrintHtml(rooms, options = {}) {
+    const items = Array.isArray(rooms) ? rooms : [];
+    const singleMode = options.singleCentered !== undefined ? Boolean(options.singleCentered) : items.length === 1;
+    const title = escapeHtml(options.title || (items.length === 1 ? `Stiker QR - ${items[0].name}` : 'Stiker QR Code Ruangan RSUD Labuha'));
+
+    const cardsHtml = items.map((r) => {
+      const buildingText = escapeHtml(r.building || 'Gedung RSUD Labuha');
+      const floorText = r.floor ? ` &bull; ${escapeHtml(r.floor)}` : '';
+      const safeName = escapeHtml(r.name || 'Unit RSUD');
+      const safeCode = escapeHtml(r.code || '-');
+      const safeUrl = escapeHtml(r.reportUrl || '');
+      const qrSrc = escapeHtml(r.qrDataUrl || '');
+      return `
+        <div class="sticker-card ${singleMode ? 'single-card' : ''}">
+          <div class="card-head">
+            <span class="rs-title">RSUD LABUHA</span>
+            <span class="dept-badge">IT HELPDESK</span>
+          </div>
+          <div class="building-pill">${buildingText}${floorText}</div>
+          <div class="qr-wrap">
+            <img src="${qrSrc}" alt="${safeCode}" />
+          </div>
+          <div class="unit-info">
+            <div class="unit-name">${safeName}</div>
+            <div class="unit-code">${safeCode}</div>
+          </div>
+          <div class="scan-banner">SCAN DENGAN HP UNTUK LAPOR</div>
+          <div class="scan-url">${safeUrl}</div>
+        </div>`;
+    }).join('\n');
+
+    return `<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: #fff; }
+  .sheet { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .sheet.single-sheet { display: flex; justify-content: center; align-items: flex-start; padding-top: 8mm; }
+  .sticker-card {
+    border: 2.2px solid #0f172a;
+    border-radius: 14px;
+    padding: 14px;
+    text-align: center;
+    background: #fff;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .sticker-card.single-card {
+    width: 102mm;
+    max-width: 100%;
+    padding: 18px;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid #0f172a;
+  }
+  .rs-title { font-size: 13px; font-weight: 900; letter-spacing: 0.6px; }
+  .dept-badge { background: #0284c7; color: #fff; font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 5px; letter-spacing: 0.4px; }
+  .building-pill {
+    display: inline-block;
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+  .qr-wrap img { width: 175px; height: 175px; display: block; margin: 4px auto; }
+  .single-card .qr-wrap img { width: 225px; height: 225px; }
+  .unit-info { border-top: 1px solid #e2e8f0; margin-top: 8px; padding-top: 8px; }
+  .unit-name { font-size: 15px; font-weight: 900; text-transform: uppercase; color: #0f172a; line-height: 1.25; }
+  .single-card .unit-name { font-size: 18px; }
+  .unit-code { font-size: 11px; font-weight: 700; font-family: monospace; color: #475569; margin-top: 3px; }
+  .scan-banner {
+    margin-top: 10px;
+    background: #0f172a;
+    color: #fff;
+    font-size: 9.5px;
+    font-weight: 800;
+    padding: 6px 8px;
+    border-radius: 7px;
+    letter-spacing: 0.5px;
+  }
+  .scan-url { font-size: 8.5px; font-family: monospace; color: #64748b; margin-top: 5px; word-break: break-all; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+</style>
+</head>
+<body>
+  <div class="sheet ${singleMode ? 'single-sheet' : ''}">${cardsHtml}</div>
+</body>
+</html>`;
+  }
+
+  async function printRoomStickersHtml(rooms, docTitle) {
+    const items = Array.isArray(rooms) ? rooms : [];
+    if (items.length === 0) {
+      throw new Error('Tidak ada stiker unit untuk dicetak');
+    }
+    const title = docTitle || (items.length === 1 ? `Stiker QR - ${items[0].name}` : 'Stiker QR Code Ruangan RSUD Labuha');
+    const html = buildRoomStickerPrintHtml(items, { title, singleCentered: items.length === 1 });
+
+    if (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.EtiketNative && typeof global.Capacitor.Plugins.EtiketNative.printHtml === 'function') {
+      await global.Capacitor.Plugins.EtiketNative.printHtml({ title, html });
+      return { native: true, html };
+    }
+
+    await new Promise((resolve) => {
+      const iframe = document.createElement('iframe');
+      iframe.setAttribute('aria-hidden', 'true');
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (err) {
+          console.error('Iframe print error:', err);
+        }
+        setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 60000);
+        resolve();
+      };
+      iframe.srcdoc = html;
+      document.body.appendChild(iframe);
+    });
+    return { native: false, html };
+  }
+
+  async function downloadQrPng(dataUrl, filename) {
+    if (!dataUrl) throw new Error('Gambar QR belum tersedia');
+    const safeName = String(filename || 'QR-Unit-RSUD-Labuha.png').replace(/[^a-zA-Z0-9._-]+/g, '-');
+    if (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.EtiketNative && typeof global.Capacitor.Plugins.EtiketNative.exportBase64File === 'function') {
+      const base64 = String(dataUrl).includes(',') ? String(dataUrl).split(',')[1] : String(dataUrl);
+      await global.Capacitor.Plugins.EtiketNative.exportBase64File({
+        filename: safeName,
+        mimeType: 'image/png',
+        base64
+      });
+      return { native: true, filename: safeName };
+    }
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = safeName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return { native: false, filename: safeName };
+  }
+
   // Expose helpers and transparent fetch wrapper
   if (!global.lucide) {
     global.lucide = { createIcons: function () {} };
@@ -1299,6 +1459,9 @@
   global.escapeHtml = escapeHtml;
   global.compressImageFile = compressImageFile;
   global.generateQrDataUrl = generateQrDataUrl;
+  global.buildRoomStickerPrintHtml = buildRoomStickerPrintHtml;
+  global.printRoomStickersHtml = printRoomStickersHtml;
+  global.downloadQrPng = downloadQrPng;
   global.ensureScriptLoaded = ensureScriptLoaded;
   global.smartFetch = smartFetch;
   global.isLocalBackendHost = () => isUsableLocalBackend() !== null && verifiedLocalExpress;

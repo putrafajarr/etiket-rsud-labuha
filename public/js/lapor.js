@@ -119,7 +119,10 @@ function checkUrlParams() {
 
       const badge = document.getElementById('qrDetectedBadge');
       const roomNameEl = document.getElementById('qrRoomName');
-      roomNameEl.textContent = `${matched.name} [${matched.code}]`;
+      const extraLoc = [matched.building, matched.floor].filter(Boolean).join(' • ');
+      roomNameEl.textContent = extraLoc
+        ? `${matched.name} [${matched.code}] — ${extraLoc}`
+        : `${matched.name} [${matched.code}]`;
       badge.classList.remove('hidden');
 
       const selectContainer = document.getElementById('roomSelectContainer');

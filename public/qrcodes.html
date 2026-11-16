@@ -25,15 +25,38 @@
     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
       <div>
         <h1 class="font-bold text-slate-800 text-base">Stiker QR Code Ruangan RSUD Labuha</h1>
-        <p class="text-xs text-slate-500">Cetak stiker ini dan tempelkan di setiap meja komputer/dinding ruangan/poli rumah sakit.</p>
+        <p class="text-xs text-slate-500">Cetak stiker per unit, per gedung, atau seluruh ruangan sekaligus.</p>
       </div>
-      <div class="flex space-x-2">
+      <div class="flex flex-wrap gap-2">
         <a href="/" class="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition">
           ← Kembali ke Dashboard
         </a>
-        <button onclick="printStickerSheet()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-sky-600/20">
+        <button id="printVisibleBtn" onclick="printStickerSheet()" class="px-5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md shadow-sky-600/20">
           <i data-lucide="printer" class="w-4 h-4"></i>
-          <span>Cetak Semua Stiker (Print / PDF)</span>
+          <span id="printVisibleBtnText">Cetak Semua Stiker (Print / PDF)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter Per Gedung & Per Unit -->
+    <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs items-center">
+      <div>
+        <select id="buildingFilterSelect" onchange="applyStickerFilters()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500">
+          <option value="">🏢 Semua Gedung</option>
+        </select>
+      </div>
+      <div>
+        <select id="unitFilterSelect" onchange="applyStickerFilters()" class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500">
+          <option value="">🚪 Semua Unit / Ruangan</option>
+        </select>
+      </div>
+      <div>
+        <input type="text" id="unitSearchInput" oninput="applyStickerFilters()" placeholder="Cari unit, kode, atau gedung..." class="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-slate-800 outline-none focus:ring-2 focus:ring-sky-500">
+      </div>
+      <div class="flex items-center justify-between sm:justify-end gap-2">
+        <span id="visibleCountBadge" class="text-[11px] font-bold text-slate-500">Memuat...</span>
+        <button type="button" onclick="resetStickerFilters()" class="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-300 rounded-lg font-bold text-slate-700 transition">
+          Reset
         </button>
       </div>
     </div>
@@ -62,18 +85,227 @@
     <!-- QR Sticker Cards injected dynamically -->
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.2"></script>
-  <script src="/js/supabase-client.js?v=4.2"></script>
+  <script src="/js/qrcode.min.js?v=4.3"></script>
+  <script src="/js/supabase-client.js?v=4.3"></script>
   <script>
-    function printStickerSheet() {
+    let allStickerRooms = [];
+    let visibleStickerRooms = [];
+    let initialParamsApplied = false;
+
+    function getEsc() {
+      return typeof window.escapeHtml === 'function' ? window.escapeHtml : (v => String(v || ''));
+    }
+
+    async function printStickerSheet() {
+      const targetRooms = visibleStickerRooms.length > 0 ? visibleStickerRooms : allStickerRooms;
+      if (!targetRooms || targetRooms.length === 0) return;
+
+      const buildingVal = document.getElementById('buildingFilterSelect')?.value || '';
+      const docTitle = targetRooms.length === 1
+        ? `Stiker QR - ${targetRooms[0].name}`
+        : (buildingVal ? `Stiker QR - ${buildingVal}` : 'Stiker QR Code Ruangan RSUD Labuha');
+
+      if (typeof window.printRoomStickersHtml === 'function') {
+        try {
+          await window.printRoomStickersHtml(targetRooms, docTitle);
+          return;
+        } catch (err) {
+          console.warn('Sticker print helper fallback:', err);
+        }
+      }
+
       if (window.Capacitor?.Plugins?.EtiketNative?.printHtml) {
         window.Capacitor.Plugins.EtiketNative.printHtml({
-          title: 'Stiker QR Code Ruangan RSUD Labuha',
+          title: docTitle,
           html: '<!DOCTYPE html>' + document.documentElement.outerHTML
         }).catch(() => window.print());
         return;
       }
       window.print();
+    }
+
+    async function printSingleSticker(roomId) {
+      const room = allStickerRooms.find(r => Number(r.id) === Number(roomId));
+      if (!room) return;
+      if (typeof window.printRoomStickersHtml === 'function') {
+        await window.printRoomStickersHtml([room], `Stiker QR - ${room.name}`);
+      } else {
+        window.print();
+      }
+    }
+
+    async function downloadStickerPng(roomId) {
+      const room = allStickerRooms.find(r => Number(r.id) === Number(roomId));
+      if (!room || !room.qrDataUrl) return;
+      const filename = `QR-${room.code || 'UNIT'}-${room.name || 'RSUD'}.png`;
+      if (typeof window.downloadQrPng === 'function') {
+        await window.downloadQrPng(room.qrDataUrl, filename);
+      }
+    }
+
+    function populateStickerFilterOptions(rooms) {
+      const bSel = document.getElementById('buildingFilterSelect');
+      const uSel = document.getElementById('unitFilterSelect');
+      const prevB = bSel ? bSel.value : '';
+      const prevU = uSel ? uSel.value : '';
+
+      if (bSel) {
+        const buildings = Array.from(new Set(rooms.map(r => String(r.building || '').trim()).filter(Boolean)))
+          .sort((a, b) => a.localeCompare(b, 'id'));
+        bSel.innerHTML = '<option value="">🏢 Semua Gedung</option>';
+        buildings.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b;
+          opt.textContent = `🏢 ${b}`;
+          bSel.appendChild(opt);
+        });
+        if (prevB && buildings.includes(prevB)) bSel.value = prevB;
+      }
+
+      if (uSel) {
+        const selectedB = bSel ? bSel.value : '';
+        const candidateRooms = selectedB
+          ? rooms.filter(r => String(r.building || '').trim() === selectedB)
+          : rooms;
+        uSel.innerHTML = '<option value="">🚪 Semua Unit / Ruangan</option>';
+        candidateRooms.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = String(r.id);
+          opt.textContent = r.building ? `${r.name} (${r.code}) - ${r.building}` : `${r.name} (${r.code})`;
+          uSel.appendChild(opt);
+        });
+        if (prevU && candidateRooms.some(r => String(r.id) === prevU)) {
+          uSel.value = prevU;
+        }
+      }
+    }
+
+    function resetStickerFilters() {
+      const bSel = document.getElementById('buildingFilterSelect');
+      const uSel = document.getElementById('unitFilterSelect');
+      const qEl = document.getElementById('unitSearchInput');
+      if (bSel) bSel.value = '';
+      if (uSel) uSel.value = '';
+      if (qEl) qEl.value = '';
+      populateStickerFilterOptions(allStickerRooms);
+      applyStickerFilters();
+    }
+
+    function renderStickerCards(roomsToRender) {
+      const grid = document.getElementById('stickerGrid');
+      const esc = getEsc();
+      grid.innerHTML = '';
+
+      if (!roomsToRender || roomsToRender.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center py-12 text-xs text-slate-500 font-semibold bg-white rounded-2xl border border-dashed border-slate-200">Tidak ada stiker unit yang cocok dengan filter yang dipilih.</div>';
+        return;
+      }
+
+      if (roomsToRender.length === 1) {
+        grid.className = 'max-w-md mx-auto grid grid-cols-1 gap-4';
+      } else {
+        grid.className = 'max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-3 gap-4';
+      }
+
+      roomsToRender.forEach(r => {
+        const buildingText = esc(r.building || 'Gedung RSUD');
+        const floorText = r.floor ? ` • ${esc(r.floor)}` : '';
+        const card = document.createElement('div');
+        card.className = 'sticker-card bg-white border-2 border-slate-800 rounded-2xl p-4 text-center flex flex-col items-center justify-between shadow-sm relative overflow-hidden';
+        card.innerHTML = `
+          <div class="w-full pb-2 mb-2 border-b-2 border-slate-800 flex items-center justify-between">
+            <span class="font-black text-xs tracking-wider text-slate-900">RSUD LABUHA</span>
+            <span class="text-[9px] font-bold bg-sky-600 text-white px-2 py-0.5 rounded uppercase">IT HELPDESK</span>
+          </div>
+
+          <div class="inline-flex items-center px-2.5 py-0.5 rounded-full bg-sky-50 border border-sky-200 text-sky-800 text-[10px] font-bold uppercase mb-1 max-w-full">
+            <span class="truncate">🏢 ${buildingText}${floorText}</span>
+          </div>
+
+          <div class="my-1">
+            <img src="${r.qrDataUrl}" alt="${esc(r.code)}" class="w-40 h-40 mx-auto rounded-lg">
+          </div>
+
+          <div class="w-full mt-2 pt-2 border-t border-slate-200">
+            <h3 class="font-black text-slate-900 text-sm leading-tight uppercase">${esc(r.name)}</h3>
+            <p class="text-[10px] font-mono text-slate-500 font-bold mt-0.5">${esc(r.code)}</p>
+          </div>
+
+          <div class="w-full bg-slate-900 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg mt-2 tracking-wide uppercase">
+            📲 SCAN DENGAN HP UNTUK LAPOR
+          </div>
+          <div class="text-[9px] font-mono text-slate-400 mt-1 truncate max-w-full">
+            ${esc(r.reportUrl)}
+          </div>
+
+          <div class="no-print w-full mt-3 pt-2.5 border-t border-dashed border-slate-200 flex items-center justify-center gap-2">
+            <button type="button" onclick="printSingleSticker(${r.id})" class="flex-1 px-2.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-[11px] font-bold transition inline-flex items-center justify-center gap-1 shadow-sm">
+              <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+              <span>Cetak Unit Ini</span>
+            </button>
+            <button type="button" onclick="downloadStickerPng(${r.id})" class="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold transition inline-flex items-center justify-center gap-1" title="Unduh QR PNG">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>PNG</span>
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function applyStickerFilters() {
+      const bSel = document.getElementById('buildingFilterSelect');
+      const uSel = document.getElementById('unitFilterSelect');
+      const qEl = document.getElementById('unitSearchInput');
+
+      const bVal = bSel ? bSel.value : '';
+      const prevU = uSel ? uSel.value : '';
+
+      // Refresh unit dropdown options when building changes
+      if (uSel) {
+        const candidateRooms = bVal
+          ? allStickerRooms.filter(r => String(r.building || '').trim() === bVal)
+          : allStickerRooms;
+        uSel.innerHTML = '<option value="">🚪 Semua Unit / Ruangan</option>';
+        candidateRooms.forEach(r => {
+          const opt = document.createElement('option');
+          opt.value = String(r.id);
+          opt.textContent = r.building ? `${r.name} (${r.code}) - ${r.building}` : `${r.name} (${r.code})`;
+          uSel.appendChild(opt);
+        });
+        if (prevU && candidateRooms.some(r => String(r.id) === prevU)) {
+          uSel.value = prevU;
+        }
+      }
+
+      const uVal = uSel ? uSel.value : '';
+      const q = (qEl?.value || '').trim().toLowerCase();
+
+      visibleStickerRooms = allStickerRooms.filter(r => {
+        if (bVal && String(r.building || '').trim() !== bVal) return false;
+        if (uVal && String(r.id) !== String(uVal)) return false;
+        if (!q) return true;
+        const hay = `${r.name || ''} ${r.code || ''} ${r.building || ''} ${r.floor || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      const badge = document.getElementById('visibleCountBadge');
+      if (badge) {
+        badge.textContent = `${visibleStickerRooms.length} dari ${allStickerRooms.length} unit`;
+      }
+      const btnText = document.getElementById('printVisibleBtnText');
+      if (btnText) {
+        if (visibleStickerRooms.length === 1) {
+          btnText.textContent = `Cetak Unit (${visibleStickerRooms[0].code})`;
+        } else if (visibleStickerRooms.length < allStickerRooms.length) {
+          btnText.textContent = `Cetak ${visibleStickerRooms.length} Stiker Terfilter`;
+        } else {
+          btnText.textContent = 'Cetak Semua Stiker (Print / PDF)';
+        }
+      }
+
+      renderStickerCards(visibleStickerRooms);
     }
 
     async function loadQRCodes() {
@@ -92,47 +324,31 @@
         const res = await fetch(url);
         if (!res.ok) throw new Error('Gagal membuat QR Code ruangan');
         const rooms = await res.json();
-        const esc = typeof window.escapeHtml === 'function' ? window.escapeHtml : (v => String(v || ''));
+        allStickerRooms = Array.isArray(rooms) ? rooms : [];
 
-        if (rooms.length > 0 && !customHost) {
+        if (allStickerRooms.length > 0 && !customHost) {
           try {
-            const parsed = new URL(rooms[0].reportUrl);
+            const parsed = new URL(allStickerRooms[0].reportUrl);
             document.getElementById('customHostInput').value = parsed.host;
           } catch (e) {}
         }
 
-        grid.innerHTML = '';
-        if (!rooms || rooms.length === 0) {
-          grid.innerHTML = '<div class="col-span-full text-center py-12 text-xs text-slate-500 font-semibold">Belum ada data ruangan aktif di Supabase.</div>';
+        populateStickerFilterOptions(allStickerRooms);
+
+        if (!initialParamsApplied) {
+          initialParamsApplied = true;
+          const params = new URLSearchParams(window.location.search);
+          const qBuilding = params.get('building');
+          const qRoomId = params.get('room_id');
+          if (qBuilding && document.getElementById('buildingFilterSelect')) {
+            document.getElementById('buildingFilterSelect').value = qBuilding;
+          }
+          if (qRoomId && document.getElementById('unitFilterSelect')) {
+            document.getElementById('unitFilterSelect').value = qRoomId;
+          }
         }
-        rooms.forEach(r => {
-          const card = document.createElement('div');
-          card.className = 'sticker-card bg-white border-2 border-slate-800 rounded-2xl p-4 text-center flex flex-col items-center justify-between shadow-sm relative overflow-hidden';
-          card.innerHTML = `
-            <div class="w-full pb-2 mb-2 border-b-2 border-slate-800 flex items-center justify-between">
-              <span class="font-black text-xs tracking-wider text-slate-900">RSUD LABUHA</span>
-              <span class="text-[9px] font-bold bg-sky-600 text-white px-2 py-0.5 rounded uppercase">IT HELPDESK</span>
-            </div>
 
-            <div class="my-1">
-              <img src="${r.qrDataUrl}" alt="${esc(r.code)}" class="w-40 h-40 mx-auto rounded-lg">
-            </div>
-
-            <div class="w-full mt-2 pt-2 border-t border-slate-200">
-              <h3 class="font-black text-slate-900 text-sm leading-tight uppercase">${esc(r.name)}</h3>
-              <p class="text-[10px] font-mono text-slate-500 font-bold mt-0.5">${esc(r.code)} • ${esc(r.building || 'Gedung RSUD')}</p>
-            </div>
-
-            <div class="w-full bg-slate-900 text-white text-[9px] font-bold py-1.5 px-2 rounded-lg mt-2 tracking-wide uppercase">
-              📲 SCAN DENGAN HP UNTUK LAPOR
-            </div>
-            <div class="text-[9px] font-mono text-slate-400 mt-1 truncate max-w-full">
-              ${esc(r.reportUrl)}
-            </div>
-          `;
-          grid.appendChild(card);
-        });
-
+        applyStickerFilters();
         loading.classList.add('hidden');
         grid.classList.remove('hidden');
         lucide.createIcons();
