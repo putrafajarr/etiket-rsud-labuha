@@ -317,7 +317,7 @@ router.post('/:id/wa-log', async (req, res) => {
 router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, user_name = 'Teknisi IT', notes, pending_reason, improvement_suggestion } = req.body;
+    const { status, user_name = 'Teknisi IT', notes, pending_reason, improvement_suggestion, is_draft } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: 'Status baru wajib disertakan' });
@@ -392,11 +392,13 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
 
     await query.run(sql, params);
 
-    // Log action
-    await query.run(`
-      INSERT INTO ticket_logs (ticket_id, user_name, action, notes)
-      VALUES (?, ?, ?, ?)
-    `, [id, user_name, `STATUS DIUBAH: ${status.toUpperCase()}`, notes || pending_reason || `Status tiket diperbarui menjadi ${status}`]);
+    const isDraft = is_draft === '1' || is_draft === true || is_draft === 'true';
+    if (!isDraft) {
+      await query.run(`
+        INSERT INTO ticket_logs (ticket_id, user_name, action, notes)
+        VALUES (?, ?, ?, ?)
+      `, [id, user_name, `STATUS DIUBAH: ${status.toUpperCase()}`, notes || pending_reason || `Status tiket diperbarui menjadi ${status}`]);
+    }
 
     const updatedTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
     const io = req.app.get('io');

@@ -1,9 +1,11 @@
 package id.rsudlabuha.etiket;
 
 import android.Manifest;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.print.PrintAttributes;
@@ -297,6 +299,88 @@ public class EtiketNativePlugin extends Plugin {
                 call.reject("Gagal membuka pencetakan: " + e.getMessage());
             }
         });
+    }
+
+    @PluginMethod
+    public void shareToWhatsApp(PluginCall call) {
+        String phone = call.getString("phone", "");
+        String message = call.getString("message", "");
+        String imageBase64 = call.getString("imageBase64", "");
+        String mimeType = call.getString("mimeType", "image/jpeg");
+        String rawName = call.getString("filename", "bukti-etiket.jpg");
+
+        if (imageBase64 == null || imageBase64.trim().isEmpty()) {
+            JSObject ret = new JSObject();
+            ret.put("ok", false);
+            ret.put("reason", "no_image");
+            call.resolve(ret);
+            return;
+        }
+
+        try {
+            String pureBase64 = imageBase64.contains(",") ? imageBase64.substring(imageBase64.indexOf(',') + 1) : imageBase64;
+            byte[] bytes = Base64.decode(pureBase64, Base64.DEFAULT);
+            String safeName = new File(rawName != null && !rawName.isEmpty() ? rawName : "bukti-etiket.jpg").getName();
+            File outFile = new File(getContext().getCacheDir(), safeName);
+            try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                fos.write(bytes);
+                fos.flush();
+            }
+
+            Uri uri = FileProvider.getUriForFile(
+                getContext(),
+                getContext().getPackageName() + ".fileprovider",
+                outFile
+            );
+
+            String digits = phone != null ? phone.replaceAll("\\D+", "") : "";
+            if (digits.startsWith("0")) {
+                digits = "62" + digits.substring(1);
+            }
+            final String cleanPhone = digits;
+            final String safeMime = (mimeType != null && !mimeType.isEmpty()) ? mimeType : "image/*";
+            final String finalMsg = message != null ? message : "";
+
+            getActivity().runOnUiThread(() -> {
+                Intent intent = new Intent(Intent.ACTION_SEND);
+                intent.setType(safeMime);
+                intent.putExtra(Intent.EXTRA_STREAM, uri);
+                intent.putExtra(Intent.EXTRA_TEXT, finalMsg);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                if (cleanPhone.length() >= 8) {
+                    intent.putExtra("jid", cleanPhone + "@s.whatsapp.net");
+                }
+
+                String launchedPkg = null;
+                PackageManager pm = getContext().getPackageManager();
+                String[] candidates = new String[] { "com.whatsapp", "com.whatsapp.w4b" };
+                for (String pkg : candidates) {
+                    try {
+                        pm.getPackageInfo(pkg, 0);
+                        Intent pkgIntent = new Intent(intent);
+                        pkgIntent.setPackage(pkg);
+                        getActivity().startActivity(pkgIntent);
+                        launchedPkg = pkg;
+                        break;
+                    } catch (PackageManager.NameNotFoundException | ActivityNotFoundException ignored) {
+                    }
+                }
+
+                if (launchedPkg == null) {
+                    Intent chooser = Intent.createChooser(intent, "Kirim Foto & Penjelasan via WhatsApp");
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    getActivity().startActivity(chooser);
+                    launchedPkg = "chooser";
+                }
+
+                JSObject ret = new JSObject();
+                ret.put("ok", true);
+                ret.put("targetPackage", launchedPkg);
+                call.resolve(ret);
+            });
+        } catch (Exception e) {
+            call.reject("Gagal membagikan gambar ke WhatsApp: " + e.getMessage());
+        }
     }
 
     private void startOrStopMonitorService(boolean enable) {

@@ -2589,21 +2589,52 @@ function loadTechnicianTickets() {
   lucide.createIcons();
 }
 
-function buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion) {
+function getTicketPublicTrackingUrl(ticketNo) {
+  let baseOrigin = '';
+  const configured = String((appSettings && appSettings.app_server_url) || '').trim();
+  if (configured && /^https?:\/\//i.test(configured) && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
+    try {
+      baseOrigin = new URL(configured).origin;
+    } catch (e) {}
+  }
+  if (!baseOrigin && typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol)) {
+    const host = window.location.hostname || '';
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      baseOrigin = window.location.origin;
+    }
+  }
+  if (!baseOrigin) {
+    baseOrigin = 'https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev';
+  }
+  return `${baseOrigin}/track.html?ticket=${encodeURIComponent(ticketNo || '')}`;
+}
+
+function buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion, options = {}) {
   const techName = activeUser ? activeUser.name : 'Tim IT RSUD Labuha';
   const reporterName = ticket?.reporter_name || 'Bapak/Ibu';
   const roomName = ticket?.room_name || 'Ruangan RSUD';
   const ticketNo = ticket?.ticket_no || '';
-  const title = ticket?.title || '';
-
-  if (type === 'otw') {
-    return `Halo ${reporterName},\n\nSaya *${techName}* dari Tim IT RSUD Labuha saat ini *SEDANG MENUJU KE ${roomName}* untuk menangani kendala:\n"${title}" (${ticketNo}).\n\nMohon ditunggu, terima kasih.`;
-  }
-
+  const rawTitle = String(ticket?.title || '').trim();
+  const rawDesc = String(ticket?.description || '').trim();
+  const fullProblem = (rawDesc && rawDesc.length >= rawTitle.length) ? rawDesc : (rawTitle || '-');
   const actionText = String(liveNotes !== undefined ? liveNotes : (ticket?.resolution_notes || '')).trim();
   const suggText = String(liveSuggestion !== undefined ? liveSuggestion : (ticket?.improvement_suggestion || '')).trim();
+  const trackingUrl = ticketNo ? getTicketPublicTrackingUrl(ticketNo) : '';
+  const hasPhoto = Boolean(options.hasPhoto || ticket?.proof_photo_url || ticket?.photo_url);
 
-  let msg = `Halo ${reporterName},\n\nLaporan kendala IT di *${roomName}* (Tiket: *${ticketNo}*) telah ditangani oleh *${techName}* (Tim IT RSUD Labuha).\n\n*Kendala:* ${title}`;
+  if (type === 'otw') {
+    let otwMsg = `Halo ${reporterName},\n\nSaya *${techName}* dari Tim IT RSUD Labuha saat ini *SEDANG MENUJU KE ${roomName}* (Tiket: *${ticketNo}*).\n\n*Keluhan / Penjelasan:*\n${fullProblem}`;
+    if (actionText) {
+      otwMsg += `\n\n*Catatan / Tindakan Awal:*\n${actionText}`;
+    }
+    if (trackingUrl) {
+      otwMsg += `\n\n🔍 *Pantau Progres:* ${trackingUrl}`;
+    }
+    otwMsg += `\n\nMohon ditunggu, terima kasih.`;
+    return otwMsg;
+  }
+
+  let msg = `Halo ${reporterName},\n\nLaporan kendala IT di *${roomName}* (Tiket: *${ticketNo}*) telah ditangani oleh *${techName}* (Tim IT RSUD Labuha).\n\n*Keluhan / Penjelasan Masalah:*\n${fullProblem}`;
   if (actionText) {
     msg += `\n\n*Hasil Pengerjaan / Tindak Lanjut:*\n${actionText}`;
   } else {
@@ -2612,8 +2643,104 @@ function buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion) {
   if (suggText) {
     msg += `\n\n*Usulan Perbaikan:*\n${suggText}`;
   }
+  if (trackingUrl) {
+    msg += hasPhoto
+      ? `\n\n📸 *Lihat Foto Bukti & Rincian Lengkap:*\n${trackingUrl}`
+      : `\n\n🔍 *Rincian Penanganan & Beri Rating:*\n${trackingUrl}`;
+  }
   msg += `\n\nSilakan dicek kembali fungsinya. Terima kasih atas kerja samanya.`;
   return msg;
+}
+
+async function fileToImageDataUrl(file) {
+  if (!file) return '';
+  if (typeof window.compressImageFile === 'function') {
+    try {
+      return await window.compressImageFile(file, { maxDim: 1024, quality: 0.72, maxLength: 700000 });
+    } catch (e) {}
+  }
+  return new Promise((resolve) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(typeof fr.result === 'string' ? fr.result : '');
+    fr.onerror = () => resolve('');
+    fr.readAsDataURL(file);
+  });
+}
+
+async function resolveImageDataUrlForShare(ticket, proofFile) {
+  if (proofFile) {
+    const dataUrl = await fileToImageDataUrl(proofFile);
+    if (dataUrl) return dataUrl;
+  }
+  const srcUrl = ticket?.proof_photo_url || ticket?.photo_url || '';
+  if (!srcUrl) return '';
+  if (String(srcUrl).startsWith('data:image/')) return srcUrl;
+  try {
+    const resp = await fetch(srcUrl);
+    if (!resp.ok) return '';
+    const blob = await resp.blob();
+    return await new Promise((resolve) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(typeof fr.result === 'string' ? fr.result : '');
+      fr.onerror = () => resolve('');
+      fr.readAsDataURL(blob);
+    });
+  } catch (e) {
+    return '';
+  }
+}
+
+async function saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, proofFile) {
+  if (!ticket || !ticket.id) return ticket;
+  const isDone = ticket.status === 'resolved' || ticket.status === 'closed';
+  if (isDone) return ticket;
+
+  const trimmedNotes = String(liveNotes || '').trim();
+  const trimmedSugg = String(liveSuggestion || '').trim();
+  const notesChanged = trimmedNotes && trimmedNotes !== String(ticket.resolution_notes || '').trim();
+  const suggChanged = trimmedSugg && trimmedSugg !== String(ticket.improvement_suggestion || '').trim();
+  if (!proofFile && !notesChanged && !suggChanged) return ticket;
+
+  try {
+    const draftStatus = ticket.status === 'pending' ? 'pending' : 'in_progress';
+    const formData = new FormData();
+    formData.append('status', draftStatus);
+    formData.append('notes', trimmedNotes || ticket.resolution_notes || '');
+    formData.append('improvement_suggestion', trimmedSugg || ticket.improvement_suggestion || '');
+    formData.append('user_name', activeUser ? activeUser.name : 'Teknisi IT');
+    formData.append('is_draft', '1');
+    if (proofFile) {
+      formData.append('proof_photo', proofFile);
+    }
+
+    const res = await fetch(`/api/tickets/${ticket.id}/status`, {
+      method: 'PATCH',
+      body: formData
+    });
+    const resData = await res.json();
+    if (res.ok && resData && resData.ticket) {
+      Object.assign(ticket, resData.ticket);
+      const idx = (allTickets || []).findIndex(item => Number(item.id) === Number(ticket.id));
+      if (idx !== -1) {
+        allTickets[idx] = Object.assign({}, allTickets[idx], resData.ticket);
+      }
+      if (selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticket.id)) {
+        if (resData.ticket.proof_photo_url) {
+          const proofWrap = document.getElementById('modalProofPhotoWrap');
+          const proofImg = document.getElementById('modalProofPhotoPreview');
+          const photosSec = document.getElementById('modalPhotosSection');
+          if (proofImg) proofImg.src = resData.ticket.proof_photo_url;
+          if (proofWrap) proofWrap.classList.remove('hidden');
+          if (photosSec) photosSec.classList.remove('hidden');
+        }
+        const proofInput = document.getElementById('modalProofPhoto');
+        if (proofInput && proofFile) proofInput.value = '';
+      }
+    }
+  } catch (e) {
+    console.warn('Draft save before WA warning:', e);
+  }
+  return ticket;
 }
 
 async function recordTicketWaSent(ticketId, waType, message) {
@@ -2666,9 +2793,47 @@ async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
     cleanPhone = '62' + cleanPhone.substring(1);
   }
 
-  const message = buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion);
+  const inThisModal = selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticket.id);
+  const proofInput = inThisModal ? document.getElementById('modalProofPhoto') : null;
+  const selectedProofFile = proofInput && proofInput.files && proofInput.files[0] ? proofInput.files[0] : null;
+  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url);
+
+  const message = buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion, { hasPhoto });
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+
+  const nativePlugin = window.Capacitor?.Plugins?.EtiketNative;
+  if (hasPhoto && nativePlugin && typeof nativePlugin.shareToWhatsApp === 'function') {
+    const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
+    await saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, selectedProofFile);
+    if (imgDataUrl && imgDataUrl.startsWith('data:image/')) {
+      try {
+        const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const ext = mimeType.includes('png') ? 'png' : 'jpg';
+        const shareRes = await nativePlugin.shareToWhatsApp({
+          phone: cleanPhone,
+          message,
+          imageBase64: imgDataUrl,
+          mimeType,
+          filename: `Bukti-${ticket.ticket_no || ticket.id}.${ext}`
+        });
+        if (shareRes && shareRes.ok) {
+          await recordTicketWaSent(ticket.id, type, message);
+          return true;
+        }
+      } catch (nativeErr) {
+        console.warn('Native WhatsApp image share fallback ke wa.me:', nativeErr);
+      }
+    }
+    window.open(waUrl, '_blank');
+    await recordTicketWaSent(ticket.id, type, message);
+    return true;
+  }
+
+  // Web Browser: buka wa.me langsung secara sinkron agar tidak diblokir popup blocker,
+  // sekaligus upload draft foto bukti & catatan ke server agar link track.html langsung lengkap
   window.open(waUrl, '_blank');
+  await saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, selectedProofFile);
   await recordTicketWaSent(ticket.id, type, message);
   return true;
 }
@@ -3201,7 +3366,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.4');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.5');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');

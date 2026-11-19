@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.4');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.5');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.4').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.5').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -766,12 +766,15 @@
     });
     const updatedTicket = Array.isArray(updated) ? updated[0] : updated;
 
-    await insertTicketLog(
-      ticketId,
-      userName,
-      `STATUS DIUBAH: ${status.toUpperCase()}`,
-      notes || pendingReason || `Status tiket diperbarui menjadi ${status}`
-    );
+    const isDraft = fields.is_draft === '1' || fields.is_draft === true;
+    if (!isDraft) {
+      await insertTicketLog(
+        ticketId,
+        userName,
+        `STATUS DIUBAH: ${status.toUpperCase()}`,
+        notes || pendingReason || `Status tiket diperbarui menjadi ${status}`
+      );
+    }
 
     return jsonResponse({ success: true, message: 'Status berhasil diperbarui', ticket: updatedTicket }, 200);
   }

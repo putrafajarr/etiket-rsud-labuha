@@ -1,17 +1,17 @@
-const CACHE_NAME = 'etiket-rsud-labuha-v8';
+const CACHE_NAME = 'etiket-rsud-labuha-v9';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/lapor.html',
   '/track.html',
   '/qrcodes.html',
-  '/css/custom.css?v=4.4',
-  '/js/supabase-client.js?v=4.4',
-  '/js/qrcode.min.js?v=4.4',
-  '/js/bcrypt.min.js?v=4.4',
-  '/js/sound.js?v=4.4',
-  '/js/app.js?v=4.4',
-  '/js/lapor.js?v=4.4',
+  '/css/custom.css?v=4.5',
+  '/js/supabase-client.js?v=4.5',
+  '/js/qrcode.min.js?v=4.5',
+  '/js/bcrypt.min.js?v=4.5',
+  '/js/sound.js?v=4.5',
+  '/js/app.js?v=4.5',
+  '/js/lapor.js?v=4.5',
   '/manifest.json'
 ];
 
