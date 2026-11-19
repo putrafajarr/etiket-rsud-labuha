@@ -118,6 +118,18 @@
           <p id="dispDesc" class="text-xs text-slate-600 mt-1 leading-relaxed"></p>
         </div>
 
+        <!-- Hasil Pengerjaan & Usulan Perbaikan IT -->
+        <div id="itResolutionSection" class="hidden bg-emerald-50/70 p-4 rounded-xl border border-emerald-200 space-y-2 text-xs">
+          <div id="itActionWrap" class="hidden">
+            <span class="font-bold text-emerald-900 block mb-0.5">Hasil Pengerjaan / Tindak Lanjut IT:</span>
+            <p id="dispResolutionNotes" class="text-slate-700 leading-relaxed whitespace-pre-line"></p>
+          </div>
+          <div id="itSuggestionWrap" class="hidden pt-1 border-t border-emerald-200/70">
+            <span class="font-bold text-sky-900 block mb-0.5">Usulan Perbaikan / Rekomendasi IT:</span>
+            <p id="dispImprovementSuggestion" class="text-slate-700 leading-relaxed whitespace-pre-line"></p>
+          </div>
+        </div>
+
         <!-- Foto Kendala & Bukti Perbaikan -->
         <div id="photosSection" class="hidden space-y-3">
           <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Foto Terlampir</span>
@@ -171,7 +183,7 @@
     </div>
   </main>
 
-  <script src="/js/supabase-client.js?v=4.3"></script>
+  <script src="/js/supabase-client.js?v=4.4"></script>
   <script>
     let currentTicket = null;
     let selectedRating = 0;
@@ -243,6 +255,29 @@
       // Priority Badge
       const priorityBadge = document.getElementById('priorityBadge');
       priorityBadge.textContent = 'PRIORITAS: ' + (ticket.priority || 'SEDANG').toUpperCase();
+
+      // Hasil Pengerjaan & Usulan Perbaikan
+      const itResSection = document.getElementById('itResolutionSection');
+      const itActionWrap = document.getElementById('itActionWrap');
+      const itSuggWrap = document.getElementById('itSuggestionWrap');
+      const resNotes = (ticket.resolution_notes || '').trim();
+      const impSugg = (ticket.improvement_suggestion || '').trim();
+      if (resNotes && itActionWrap) {
+        document.getElementById('dispResolutionNotes').textContent = resNotes;
+        itActionWrap.classList.remove('hidden');
+      } else if (itActionWrap) {
+        itActionWrap.classList.add('hidden');
+      }
+      if (impSugg && itSuggWrap) {
+        document.getElementById('dispImprovementSuggestion').textContent = impSugg;
+        itSuggWrap.classList.remove('hidden');
+      } else if (itSuggWrap) {
+        itSuggWrap.classList.add('hidden');
+      }
+      if (itResSection) {
+        if (resNotes || impSugg) itResSection.classList.remove('hidden');
+        else itResSection.classList.add('hidden');
+      }
 
       // Photos
       const photosSection = document.getElementById('photosSection');

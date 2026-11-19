@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.3');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.4');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.3').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.4').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -651,10 +651,45 @@
     return jsonResponse({ success: true, message: 'Teknisi berhasil ditugaskan', ticket: updatedTicket }, 200);
   }
 
+  async function handleRecordTicketWaLog(ticketId, options) {
+    const { fields } = await parseRequestBody(options);
+    const waType = (fields.wa_type || 'info').trim();
+    const userName = (fields.user_name || 'Teknisi IT').trim();
+    const messagePreview = (fields.message || `Kirim WhatsApp (${waType}) ke pelapor`).trim().slice(0, 600);
+
+    const ticketRows = await supabaseRequest(`/tickets?select=*&id=eq.${ticketId}&limit=1`);
+    if (!ticketRows || ticketRows.length === 0) {
+      return jsonResponse({ error: 'Tiket tidak ditemukan' }, 404);
+    }
+    const currentTicket = ticketRows[0];
+    const nowIso = new Date().toISOString();
+    const waSentAt = currentTicket.wa_sent_at || nowIso;
+
+    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: {
+        wa_sent_at: waSentAt,
+        updated_at: nowIso
+      }
+    });
+    const updatedTicket = Array.isArray(updated) ? updated[0] : updated;
+
+    await insertTicketLog(
+      ticketId,
+      userName,
+      `KIRIM WA KE PELAPOR (${waType.toUpperCase()})`,
+      messagePreview
+    );
+
+    return jsonResponse({ success: true, wa_sent_at: waSentAt, ticket: updatedTicket }, 200);
+  }
+
   async function handleUpdateTicketStatus(ticketId, options) {
     const { fields, files } = await parseRequestBody(options);
     const status = (fields.status || '').trim();
     const notes = (fields.notes || fields.resolution_notes || '').trim();
+    const improvementSuggestion = (fields.improvement_suggestion || '').trim();
     const pendingReason = (fields.pending_reason || notes || '').trim();
     const userName = (fields.user_name || 'Teknisi IT').trim();
 
@@ -670,6 +705,18 @@
     const currentTicket = ticketRows[0];
     if (currentTicket.status === 'resolved' || currentTicket.status === 'closed') {
       return jsonResponse({ error: 'Tiket ini telah selesai dan dikunci secara permanen.' }, 400);
+    }
+
+    const hasPhone = String(currentTicket.reporter_phone || '').replace(/\D/g, '').length >= 6;
+    if ((status === 'resolved' || status === 'closed') && hasPhone && !currentTicket.wa_sent_at) {
+      const logs = await supabaseRequest(`/ticket_logs?select=id,action&ticket_id=eq.${ticketId}`).catch(() => []);
+      const hasWaLog = Array.isArray(logs) && logs.some(l => String(l.action || '').toUpperCase().includes('KIRIM WA'));
+      if (!hasWaLog) {
+        return jsonResponse({
+          error: 'Wajib kirim WhatsApp ke pelapor terlebih dahulu sebelum mengubah status menjadi Selesai.',
+          code: 'WA_REQUIRED'
+        }, 400);
+      }
     }
 
     const nowIso = new Date().toISOString();
@@ -688,11 +735,16 @@
       patchData.proof_photo_url = fields.proof_photo_url;
     }
 
+    if (improvementSuggestion) {
+      patchData.improvement_suggestion = improvementSuggestion;
+    }
+
     if (status === 'in_progress') {
       patchData.actual_response_time = currentTicket.actual_response_time || nowIso;
       if (notes) patchData.resolution_notes = notes;
     } else if (status === 'pending') {
       patchData.pending_reason = pendingReason || 'Menunggu kelengkapan / tindak lanjut';
+      if (notes) patchData.resolution_notes = notes;
     } else if (status === 'resolved' || status === 'closed') {
       patchData.resolved_at = currentTicket.resolved_at || nowIso;
       patchData.actual_resolve_time = currentTicket.actual_resolve_time || nowIso;
@@ -1164,6 +1216,9 @@
       if (method === 'PATCH' && /^\/api\/tickets\/\d+\/assign$/.test(pathname)) {
         return await handleAssignTicket(pathname.split('/')[3], options);
       }
+      if (method === 'POST' && /^\/api\/tickets\/\d+\/wa-log$/.test(pathname)) {
+        return await handleRecordTicketWaLog(pathname.split('/')[3], options);
+      }
       if (method === 'PATCH' && /^\/api\/tickets\/\d+\/status$/.test(pathname)) {
         return await handleUpdateTicketStatus(pathname.split('/')[3], options);
       }
@@ -1452,11 +1507,54 @@
     return { native: false, filename: safeName };
   }
 
+  function formatDateTimeId(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '-';
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+  }
+
+  function formatDurationDiff(startIso, endIso) {
+    if (!startIso || !endIso) return null;
+    const s = new Date(startIso).getTime();
+    const e = new Date(endIso).getTime();
+    if (Number.isNaN(s) || Number.isNaN(e) || e < s) return null;
+    const diffSec = Math.floor((e - s) / 1000);
+    if (diffSec < 60) return '< 1 mnt';
+    const totalMin = Math.round(diffSec / 60);
+    const days = Math.floor(totalMin / 1440);
+    const hours = Math.floor((totalMin % 1440) / 60);
+    const mins = totalMin % 60;
+    const parts = [];
+    if (days > 0) parts.push(`${days} hr`);
+    if (hours > 0) parts.push(`${hours} jam`);
+    if (mins > 0) parts.push(`${mins} mnt`);
+    return parts.join(' ') || '< 1 mnt';
+  }
+
+  function formatWorkDurationId(ticket) {
+    if (!ticket) return '-';
+    const startAt = ticket.assigned_at || ticket.actual_response_time || ticket.created_at;
+    const endAt = ticket.resolved_at || ticket.actual_resolve_time || ticket.closed_at;
+    if (!endAt) {
+      return (ticket.status === 'resolved' || ticket.status === 'closed') ? 'Selesai' : 'Dalam Proses';
+    }
+    return formatDurationDiff(startAt, endAt) || formatDurationDiff(ticket.created_at, endAt) || '-';
+  }
+
   // Expose helpers and transparent fetch wrapper
   if (!global.lucide) {
     global.lucide = { createIcons: function () {} };
   }
   global.escapeHtml = escapeHtml;
+  global.formatDateTimeId = formatDateTimeId;
+  global.formatDurationDiff = formatDurationDiff;
+  global.formatWorkDurationId = formatWorkDurationId;
   global.compressImageFile = compressImageFile;
   global.generateQrDataUrl = generateQrDataUrl;
   global.buildRoomStickerPrintHtml = buildRoomStickerPrintHtml;

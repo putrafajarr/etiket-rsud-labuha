@@ -132,6 +132,25 @@ if (isSupabaseHttp) {
 }
 
 async function initDb() {
+  try {
+    if (isSupabaseHttp) {
+      await query.exec(`
+        ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS improvement_suggestion TEXT;
+        ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS wa_sent_at TIMESTAMPTZ;
+      `);
+    } else {
+      const cols = await query.all('PRAGMA table_info(tickets)');
+      const names = new Set((cols || []).map(c => c.name));
+      if (!names.has('improvement_suggestion')) {
+        await query.run('ALTER TABLE tickets ADD COLUMN improvement_suggestion TEXT');
+      }
+      if (!names.has('wa_sent_at')) {
+        await query.run('ALTER TABLE tickets ADD COLUMN wa_sent_at TEXT');
+      }
+    }
+  } catch (err) {
+    console.warn('[Database] Non-fatal migration warning:', err.message);
+  }
   console.log('[Database] Ready.');
 }
 

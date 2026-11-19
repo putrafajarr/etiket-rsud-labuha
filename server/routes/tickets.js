@@ -284,11 +284,40 @@ router.patch('/:id/assign', async (req, res) => {
   }
 });
 
+// POST record WhatsApp notification dispatch to reporter
+router.post('/:id/wa-log', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { wa_type = 'info', user_name = 'Teknisi IT', message = '' } = req.body || {};
+
+    const currentTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
+    if (!currentTicket) {
+      return res.status(404).json({ error: 'Tiket tidak ditemukan' });
+    }
+
+    const now = new Date().toISOString();
+    const waSentAt = currentTicket.wa_sent_at || now;
+    await query.run('UPDATE tickets SET wa_sent_at = ?, updated_at = ? WHERE id = ?', [waSentAt, now, id]);
+
+    const preview = String(message || `Kirim WhatsApp (${wa_type}) ke pelapor`).trim().slice(0, 600);
+    await query.run(`
+      INSERT INTO ticket_logs (ticket_id, user_name, action, notes)
+      VALUES (?, ?, ?, ?)
+    `, [id, user_name, `KIRIM WA KE PELAPOR (${String(wa_type).toUpperCase()})`, preview]);
+
+    const updatedTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
+    res.json({ success: true, wa_sent_at: waSentAt, ticket: updatedTicket });
+  } catch (err) {
+    console.error('WA log error:', err);
+    res.status(500).json({ error: 'Gagal mencatat riwayat WhatsApp' });
+  }
+});
+
 // PATCH update status (in_progress, pending, resolved, closed)
 router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, user_name = 'Teknisi IT', notes, pending_reason } = req.body;
+    const { status, user_name = 'Teknisi IT', notes, pending_reason, improvement_suggestion } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: 'Status baru wajib disertakan' });
@@ -306,6 +335,20 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
       return res.status(400).json({ error: 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen. Tidak dapat diubah atau diotak-atik lagi.' });
     }
 
+    const hasPhone = String(currentTicket.reporter_phone || '').replace(/\D/g, '').length >= 6;
+    if ((status === 'resolved' || status === 'closed') && hasPhone && !currentTicket.wa_sent_at) {
+      const waLog = await query.get(
+        `SELECT id FROM ticket_logs WHERE ticket_id = ? AND UPPER(action) LIKE '%KIRIM WA%' LIMIT 1`,
+        [id]
+      );
+      if (!waLog) {
+        return res.status(400).json({
+          error: 'Wajib kirim WhatsApp ke pelapor terlebih dahulu sebelum mengubah status menjadi Selesai.',
+          code: 'WA_REQUIRED'
+        });
+      }
+    }
+
     let sql = 'UPDATE tickets SET status = ?, updated_at = ?';
     const params = [status, now];
 
@@ -316,6 +359,10 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
     if (notes) {
       sql += ', resolution_notes = ?';
       params.push(notes);
+    }
+    if (improvement_suggestion && String(improvement_suggestion).trim()) {
+      sql += ', improvement_suggestion = ?';
+      params.push(String(improvement_suggestion).trim());
     }
     if (pending_reason) {
       sql += ', pending_reason = ?';
@@ -328,7 +375,12 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
     }
     if (status === 'resolved') {
       sql += ', resolved_at = ?';
-      params.push(now);
+      if (!currentTicket.actual_resolve_time) {
+        sql += ', actual_resolve_time = ?';
+        params.push(now, now);
+      } else {
+        params.push(now);
+      }
     }
     if (status === 'closed') {
       sql += ', closed_at = ?';

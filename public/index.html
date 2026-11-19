@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.3">
+  <link rel="stylesheet" href="/css/custom.css?v=4.4">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -1034,14 +1034,15 @@
         </div>
 
         <!-- Permanently Locked Banner for Resolved / Closed Tickets -->
-        <div id="modalResolvedBanner" class="hidden p-4 bg-emerald-50/90 border-2 border-emerald-400 rounded-2xl text-center space-y-2 shadow-sm">
-          <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md">
-            ✅
-          </div>
-          <div>
+        <div id="modalResolvedBanner" class="hidden p-4 bg-emerald-50/90 border-2 border-emerald-400 rounded-2xl space-y-2.5 shadow-sm">
+          <div class="text-center space-y-1.5">
+            <div class="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold text-xl mx-auto shadow-md">
+              ✅
+            </div>
             <p class="font-bold text-sm text-emerald-950">Tiket Telah Selesai &amp; Dikunci Permanen</p>
-            <p class="text-[11px] text-emerald-800 mt-1">Status tiket ini telah selesai dikerjakan (Resolved / Closed). Seluruh aksi perbaikan, disposisi, dan tombol WhatsApp telah dikunci permanen agar data riwayat tidak dapat diotak-atik lagi.</p>
+            <p class="text-[11px] text-emerald-800">Status tiket ini telah selesai dikerjakan (Resolved / Closed) dan terkunci permanen.</p>
           </div>
+          <div id="modalResolvedSummary" class="hidden bg-white/90 border border-emerald-200 rounded-xl p-3 text-left text-xs space-y-1.5 text-slate-700"></div>
         </div>
 
         <!-- Strict Lock Banner (Read-Only Mode for Other IT) -->
@@ -1091,15 +1092,20 @@
 
           <!-- Quick WhatsApp Button to Reporter (Locked inside Action Container) -->
           <div id="modalWaBox" class="border-t pt-4 space-y-2">
-            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              2. Komunikasi WhatsApp ke Pelapor
-            </label>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                2. Komunikasi WhatsApp ke Pelapor
+              </label>
+              <span id="modalWaStatusBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                ⚠️ Wajib Kirim WA sebelum Selesai
+              </span>
+            </div>
             <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
               <div class="flex items-center space-x-2.5">
                 <span class="text-2xl shrink-0">💬</span>
                 <div>
                   <p class="text-xs font-bold text-emerald-900">Kirim WhatsApp ke Pelapor (1-Klik)</p>
-                  <p class="text-[10px] text-emerald-700">Kirim pesan langsung dari nomor WhatsApp HP Anda tanpa bot</p>
+                  <p class="text-[10px] text-emerald-700">Isi tombol "Kabari Selesai" otomatis mengambil kata dari Hasil Pengerjaan di bawah.</p>
                 </div>
               </div>
               <div class="flex items-center space-x-2 w-full sm:w-auto">
@@ -1134,8 +1140,12 @@
               </div>
             </div>
             <div>
-              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Catatan Tindakan / Solusi Teknisi:</label>
+              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Hasil Pengerjaan / Tindak Lanjut (Otomatis masuk ke WA Selesai):</label>
               <textarea id="modalResolutionNotes" rows="2" placeholder="Tuliskan komponen yang diganti, perbaikan konfigurasi, atau tindakan yang telah diambil..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Usulan Perbaikan / Rekomendasi (Opsional):</label>
+              <textarea id="modalImprovementSuggestion" rows="2" placeholder="Contoh: Disarankan penggantian baterai UPS / peremajaan kabel LAN / pengadaan unit cadangan..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
             </div>
             <button onclick="updateTicketStatus()" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs transition shadow-md">
               Simpan Pembaharuan Status
@@ -1402,11 +1412,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.3"></script>
-  <script src="/js/bcrypt.min.js?v=4.3"></script>
-  <script src="/js/supabase-client.js?v=4.3"></script>
-  <script src="/js/sound.js?v=4.3"></script>
-  <script src="/js/app.js?v=4.3"></script>
+  <script src="/js/qrcode.min.js?v=4.4"></script>
+  <script src="/js/bcrypt.min.js?v=4.4"></script>
+  <script src="/js/supabase-client.js?v=4.4"></script>
+  <script src="/js/sound.js?v=4.4"></script>
+  <script src="/js/app.js?v=4.4"></script>
 </body>
 </html>
 

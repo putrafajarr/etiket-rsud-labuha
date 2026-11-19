@@ -12,6 +12,7 @@ let activeUser = {
   role: 'koordinator'
 };
 let selectedTicketForModal = null;
+let selectedTicketLogs = [];
 let categoryChartInstance = null;
 let roomChartInstance = null;
 let filterTimeout = null;
@@ -1300,7 +1301,7 @@ function getKnownBuildingNames() {
     const clean = String(b || '').trim();
     if (clean) seen.set(clean.toLowerCase(), clean);
   });
-  (allRooms || []).forEach(r => {
+  (Array.isArray(allRooms) ? allRooms : []).forEach(r => {
     const clean = String(r.building || '').trim();
     if (clean && !seen.has(clean.toLowerCase())) {
       seen.set(clean.toLowerCase(), clean);
@@ -1311,6 +1312,7 @@ function getKnownBuildingNames() {
 
 function populateBuildingOptions() {
   const known = getKnownBuildingNames();
+  const roomsList = Array.isArray(allRooms) ? allRooms : [];
   const datalist = document.getElementById('buildingSuggestions');
   if (datalist) {
     datalist.innerHTML = known.map(b => `<option value="${esc(b)}"></option>`).join('');
@@ -1319,7 +1321,7 @@ function populateBuildingOptions() {
   const filterSelect = document.getElementById('roomBuildingFilter');
   if (filterSelect) {
     const prev = filterSelect.value || '';
-    const dbBuildings = Array.from(new Set((allRooms || []).map(r => String(r.building || '').trim()).filter(Boolean)))
+    const dbBuildings = Array.from(new Set(roomsList.map(r => String(r.building || '').trim()).filter(Boolean)))
       .sort((a, b) => a.localeCompare(b, 'id'));
     filterSelect.innerHTML = '<option value="">🏢 Semua Gedung RSUD</option>';
     dbBuildings.forEach(b => {
@@ -1346,7 +1348,11 @@ function openFilteredQrPage() {
 async function loadRoomsMaster() {
   try {
     const res = await fetch('/api/rooms');
-    allRooms = await res.json();
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) {
+      throw new Error((data && data.error) || 'Gagal memuat daftar ruangan');
+    }
+    allRooms = data;
 
     // Filter dropdown (preserve current filter selection)
     const filterSelect = document.getElementById('filterRoom');
@@ -2089,6 +2095,7 @@ async function openTicketModal(ticketId) {
       throw new Error((data && data.error) || 'Data tiket tidak ditemukan');
     }
     selectedTicketForModal = data.ticket;
+    selectedTicketLogs = data.logs || [];
 
     // Strict Lock Permission Checks
     const isDone = selectedTicketForModal.status === 'resolved' || selectedTicketForModal.status === 'closed';
@@ -2099,6 +2106,7 @@ async function openTicketModal(ticketId) {
     const actionContainer = document.getElementById('modalActionContainer');
     const readOnlyBanner = document.getElementById('modalReadOnlyBanner');
     const resolvedBanner = document.getElementById('modalResolvedBanner');
+    const resolvedSummary = document.getElementById('modalResolvedSummary');
     const claimBox = document.getElementById('modalClaimBox');
     const delegateLabel = document.getElementById('modalDelegateLabel');
     const lockBanner = document.getElementById('modalLockBanner');
@@ -2111,8 +2119,22 @@ async function openTicketModal(ticketId) {
       if (claimBox) claimBox.classList.add('hidden');
       if (actionContainer) actionContainer.classList.add('hidden');
       if (resolvedBanner) resolvedBanner.classList.remove('hidden');
+      if (resolvedSummary) {
+        const durText = typeof window.formatWorkDurationId === 'function'
+          ? window.formatWorkDurationId(selectedTicketForModal)
+          : '-';
+        const notesVal = selectedTicketForModal.resolution_notes || selectedTicketForModal.pending_reason || '-';
+        const suggVal = selectedTicketForModal.improvement_suggestion || '';
+        resolvedSummary.innerHTML = `
+          <div><span class="font-bold text-slate-500">⏱️ Lama Pengerjaan:</span> <span class="font-bold text-emerald-800">${esc(durText)}</span></div>
+          <div><span class="font-bold text-slate-500">🛠️ Hasil Pengerjaan / Tindak Lanjut:</span> <span class="text-slate-800">${esc(notesVal)}</span></div>
+          ${suggVal ? `<div><span class="font-bold text-slate-500">💡 Usulan Perbaikan:</span> <span class="text-sky-800 font-semibold">${esc(suggVal)}</span></div>` : ''}
+        `;
+        resolvedSummary.classList.remove('hidden');
+      }
     } else {
       if (resolvedBanner) resolvedBanner.classList.add('hidden');
+      if (resolvedSummary) resolvedSummary.classList.add('hidden');
       if (isUnassigned) {
         // Tiket belum diambil siapapun
         if (lockBanner) lockBanner.classList.add('hidden');
@@ -2218,30 +2240,13 @@ async function openTicketModal(ticketId) {
     document.getElementById('modalAssignTech').value = selectedTicketForModal.assigned_to || '';
     document.getElementById('modalNewStatus').value = selectedTicketForModal.status || 'in_progress';
     document.getElementById('modalResolutionNotes').value = selectedTicketForModal.resolution_notes || '';
+    const impInput = document.getElementById('modalImprovementSuggestion');
+    if (impInput) impInput.value = selectedTicketForModal.improvement_suggestion || '';
     const proofFileInput = document.getElementById('modalProofPhoto');
     if (proofFileInput) proofFileInput.value = '';
 
-    // Render Modal Logs
-    const logsList = document.getElementById('modalLogsList');
-    logsList.innerHTML = '';
-    const logs = data.logs || [];
-    if (logs.length === 0) {
-      logsList.innerHTML = '<div class="text-slate-400 text-xs italic p-2 bg-slate-50 rounded-xl border border-slate-100">Belum ada riwayat aktivitas tercatat.</div>';
-    } else {
-      logs.forEach(l => {
-        const item = document.createElement('div');
-        item.className = 'bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-start gap-2';
-        item.innerHTML = `
-          <div class="min-w-0">
-            <span class="font-bold text-slate-800">${esc(l.action)}</span>
-            <p class="text-slate-600 mt-0.5 break-words">${esc(l.notes || '-')}</p>
-            <span class="text-[10px] text-slate-400 block mt-0.5">Oleh: ${esc(l.user_name)}</span>
-          </div>
-          <span class="text-[10px] text-slate-400 shrink-0">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-        `;
-        logsList.appendChild(item);
-      });
-    }
+    refreshModalWaStatusBadge();
+    renderModalLogsList(selectedTicketLogs);
 
     document.getElementById('ticketModal').classList.remove('hidden');
     lucide.createIcons();
@@ -2249,6 +2254,51 @@ async function openTicketModal(ticketId) {
     console.error(err);
     Swal.fire('Gagal Memuat Tiket', err.message || 'Detail tiket tidak dapat dibuka.', 'error');
   }
+}
+
+function hasTicketSentWa(ticket, logs) {
+  if (ticket && ticket.wa_sent_at) return true;
+  if (Array.isArray(logs) && logs.some(l => String(l.action || '').toUpperCase().includes('KIRIM WA'))) return true;
+  return false;
+}
+
+function refreshModalWaStatusBadge() {
+  const badge = document.getElementById('modalWaStatusBadge');
+  if (!badge || !selectedTicketForModal) return;
+  const sent = hasTicketSentWa(selectedTicketForModal, selectedTicketLogs);
+  if (sent) {
+    const timeStr = selectedTicketForModal.wa_sent_at && typeof window.formatDateTimeId === 'function'
+      ? ` (${window.formatDateTimeId(selectedTicketForModal.wa_sent_at)})`
+      : '';
+    badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200';
+    badge.textContent = `✓ Sudah Kirim WA${timeStr}`;
+  } else {
+    badge.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200';
+    badge.textContent = '⚠️ Wajib Kirim WA sebelum Selesai';
+  }
+}
+
+function renderModalLogsList(logs) {
+  const logsList = document.getElementById('modalLogsList');
+  if (!logsList) return;
+  logsList.innerHTML = '';
+  if (!logs || logs.length === 0) {
+    logsList.innerHTML = '<div class="text-slate-400 text-xs italic p-2 bg-slate-50 rounded-xl border border-slate-100">Belum ada riwayat aktivitas tercatat.</div>';
+    return;
+  }
+  logs.forEach(l => {
+    const item = document.createElement('div');
+    item.className = 'bg-slate-50 p-2.5 rounded-xl border border-slate-100 flex justify-between items-start gap-2';
+    item.innerHTML = `
+      <div class="min-w-0">
+        <span class="font-bold text-slate-800">${esc(l.action)}</span>
+        <p class="text-slate-600 mt-0.5 break-words whitespace-pre-line">${esc(l.notes || '-')}</p>
+        <span class="text-[10px] text-slate-400 block mt-0.5">Oleh: ${esc(l.user_name)}</span>
+      </div>
+      <span class="text-[10px] text-slate-400 shrink-0">${new Date(l.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+    `;
+    logsList.appendChild(item);
+  });
 }
 
 function openImageLightbox(src, caption) {
@@ -2384,7 +2434,35 @@ async function updateTicketStatus() {
 
   const status = document.getElementById('modalNewStatus').value;
   const notes = document.getElementById('modalResolutionNotes').value;
+  const improvementSuggestion = (document.getElementById('modalImprovementSuggestion')?.value || '').trim();
   const proofPhotoInput = document.getElementById('modalProofPhoto');
+
+  const isClosingStatus = status === 'resolved' || status === 'closed';
+  const hasReporterPhone = String(selectedTicketForModal.reporter_phone || '').replace(/\D/g, '').length >= 6;
+  if (isClosingStatus && hasReporterPhone && !hasTicketSentWa(selectedTicketForModal, selectedTicketLogs)) {
+    const waPrompt = await Swal.fire({
+      icon: 'warning',
+      title: 'Wajib Kirim WA ke Pelapor Dulu',
+      html: `
+        <p class="text-xs text-slate-600 leading-relaxed">
+          Sesuai prosedur layanan IT, teknisi wajib <b>mengirim pesan WhatsApp ke pelapor</b> terlebih dahulu sebelum status tiket dapat diubah menjadi <b>Selesai</b>.
+        </p>
+      `,
+      showCancelButton: true,
+      showDenyButton: true,
+      confirmButtonText: '💬 Kirim WA Hasil Pengerjaan',
+      denyButtonText: '🚀 Kirim WA OTW',
+      cancelButtonText: 'Batal',
+      confirmButtonColor: '#059669',
+      denyButtonColor: '#0284c7'
+    });
+    if (waPrompt.isConfirmed) {
+      await sendWhatsAppDirect('done');
+    } else if (waPrompt.isDenied) {
+      await sendWhatsAppDirect('otw');
+    }
+    return;
+  }
 
   const savedTicketNo = selectedTicketForModal.ticket_no;
   const savedRoom = selectedTicketForModal.room_name;
@@ -2394,6 +2472,7 @@ async function updateTicketStatus() {
   const formData = new FormData();
   formData.append('status', status);
   formData.append('notes', notes);
+  formData.append('improvement_suggestion', improvementSuggestion);
   formData.append('user_name', activeUser.name);
   if (proofPhotoInput.files && proofPhotoInput.files[0]) {
     formData.append('proof_photo', proofPhotoInput.files[0]);
@@ -2510,14 +2589,112 @@ function loadTechnicianTickets() {
   lucide.createIcons();
 }
 
-function sendDirectWaByTicketId(ticketId, type) {
+function buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion) {
+  const techName = activeUser ? activeUser.name : 'Tim IT RSUD Labuha';
+  const reporterName = ticket?.reporter_name || 'Bapak/Ibu';
+  const roomName = ticket?.room_name || 'Ruangan RSUD';
+  const ticketNo = ticket?.ticket_no || '';
+  const title = ticket?.title || '';
+
+  if (type === 'otw') {
+    return `Halo ${reporterName},\n\nSaya *${techName}* dari Tim IT RSUD Labuha saat ini *SEDANG MENUJU KE ${roomName}* untuk menangani kendala:\n"${title}" (${ticketNo}).\n\nMohon ditunggu, terima kasih.`;
+  }
+
+  const actionText = String(liveNotes !== undefined ? liveNotes : (ticket?.resolution_notes || '')).trim();
+  const suggText = String(liveSuggestion !== undefined ? liveSuggestion : (ticket?.improvement_suggestion || '')).trim();
+
+  let msg = `Halo ${reporterName},\n\nLaporan kendala IT di *${roomName}* (Tiket: *${ticketNo}*) telah ditangani oleh *${techName}* (Tim IT RSUD Labuha).\n\n*Kendala:* ${title}`;
+  if (actionText) {
+    msg += `\n\n*Hasil Pengerjaan / Tindak Lanjut:*\n${actionText}`;
+  } else {
+    msg += `\n\nStatus pengerjaan saat ini telah dinyatakan *SELESAI DIPERBAIKI*.`;
+  }
+  if (suggText) {
+    msg += `\n\n*Usulan Perbaikan:*\n${suggText}`;
+  }
+  msg += `\n\nSilakan dicek kembali fungsinya. Terima kasih atas kerja samanya.`;
+  return msg;
+}
+
+async function recordTicketWaSent(ticketId, waType, message) {
+  try {
+    const res = await fetch(`/api/tickets/${ticketId}/wa-log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wa_type: waType,
+        user_name: activeUser ? activeUser.name : 'Tim IT RSUD Labuha',
+        message
+      })
+    });
+    const data = await res.json();
+    const waSentAt = data?.wa_sent_at || new Date().toISOString();
+
+    if (selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticketId)) {
+      selectedTicketForModal.wa_sent_at = selectedTicketForModal.wa_sent_at || waSentAt;
+      selectedTicketLogs.push({
+        action: `KIRIM WA KE PELAPOR (${String(waType).toUpperCase()})`,
+        notes: message,
+        user_name: activeUser ? activeUser.name : 'Tim IT RSUD Labuha',
+        created_at: waSentAt
+      });
+      refreshModalWaStatusBadge();
+      renderModalLogsList(selectedTicketLogs);
+    }
+
+    const idx = (allTickets || []).findIndex(item => Number(item.id) === Number(ticketId));
+    if (idx !== -1) {
+      allTickets[idx].wa_sent_at = allTickets[idx].wa_sent_at || waSentAt;
+    }
+    return waSentAt;
+  } catch (err) {
+    console.warn('Gagal menyimpan log WA:', err);
+    return null;
+  }
+}
+
+async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
+  if (!ticket) return false;
+  const reporterPhone = ticket.reporter_phone || '';
+  if (!reporterPhone) {
+    Swal.fire('Info', 'Nomor WhatsApp pelapor tidak tertera', 'info');
+    return false;
+  }
+
+  let cleanPhone = String(reporterPhone).replace(/\D/g, '');
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = '62' + cleanPhone.substring(1);
+  }
+
+  const message = buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion);
+  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+  window.open(waUrl, '_blank');
+  await recordTicketWaSent(ticket.id, type, message);
+  return true;
+}
+
+async function sendDirectWaByTicketId(ticketId, type) {
   const t = (allTickets || []).find(item => item.id === ticketId) || selectedTicketForModal;
   if (!t) return;
-  sendDirectWaFromCard(t.ticket_no, t.room_name, t.reporter_name, t.reporter_phone, t.title, type);
+  if (type === 'done' && !String(t.resolution_notes || '').trim()) {
+    await openTicketModal(t.id);
+    const notesEl = document.getElementById('modalResolutionNotes');
+    if (notesEl) notesEl.focus();
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'info',
+      title: 'Isi Hasil Pengerjaan terlebih dahulu untuk dikirim via WA Selesai',
+      showConfirmButton: false,
+      timer: 3500
+    });
+    return;
+  }
+  await dispatchDirectWa(t, type, t.resolution_notes || '', t.improvement_suggestion || '');
 }
 
 // Kirim Pesan WhatsApp Langsung dari HP Teknisi (100% Gratis Tanpa Bot)
-function sendWhatsAppDirect(type) {
+async function sendWhatsAppDirect(type) {
   if (!selectedTicketForModal) return;
   const t = selectedTicketForModal;
 
@@ -2536,31 +2713,36 @@ function sendWhatsAppDirect(type) {
     return;
   }
 
-  sendDirectWaFromCard(t.ticket_no, t.room_name, t.reporter_name, t.reporter_phone, t.title, type);
-}
+  const notesEl = document.getElementById('modalResolutionNotes');
+  const suggEl = document.getElementById('modalImprovementSuggestion');
+  const liveNotes = (notesEl ? notesEl.value : (t.resolution_notes || '')).trim();
+  const liveSuggestion = (suggEl ? suggEl.value : (t.improvement_suggestion || '')).trim();
 
-function sendDirectWaFromCard(ticketNo, roomName, reporterName, reporterPhone, title, type) {
-  if (!reporterPhone) {
-    Swal.fire('Info', 'Nomor WhatsApp pelapor tidak tertera', 'info');
+  if (type === 'done' && !liveNotes) {
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Isi Hasil Pengerjaan Dulu',
+      text: 'Mohon isi kolom "Hasil Pengerjaan / Tindak Lanjut" terlebih dahulu agar isi pesan WhatsApp ke pelapor otomatis mengambil keterangan pengerjaan Anda.',
+      confirmButtonColor: '#0284c7'
+    });
+    if (notesEl) notesEl.focus();
     return;
   }
 
-  let cleanPhone = reporterPhone.replace(/\D/g, '');
-  if (cleanPhone.startsWith('0')) {
-    cleanPhone = '62' + cleanPhone.substring(1);
-  }
+  await dispatchDirectWa(t, type, liveNotes, liveSuggestion);
+}
 
-  const techName = activeUser ? activeUser.name : 'Tim IT RSUD Labuha';
-  let message = '';
-
-  if (type === 'otw') {
-    message = `Halo ${reporterName},\n\nSaya *${techName}* dari Tim IT RSUD Labuha saat ini *SEDANG MENUJU KE ${roomName}* untuk menangani kendala:\n"${title}" (${ticketNo}).\n\nMohon ditunggu, terima kasih.`;
-  } else {
-    message = `Halo ${reporterName},\n\nKendala IT di *${roomName}* dengan nomor tiket *${ticketNo}*:\n"${title}"\n\nTelah dinyatakan *SELESAI DIPERBAIKI* oleh saya (*${techName}* - Tim IT RSUD Labuha).\n\nSilakan dicek kembali fungsinya. Terima kasih atas kerja samanya.`;
-  }
-
-  const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
-  window.open(waUrl, '_blank');
+function sendDirectWaFromCard(ticketNo, roomName, reporterName, reporterPhone, title, type, resolutionNotes, improvementSuggestion) {
+  return dispatchDirectWa({
+    id: selectedTicketForModal?.id || 0,
+    ticket_no: ticketNo,
+    room_name: roomName,
+    reporter_name: reporterName,
+    reporter_phone: reporterPhone,
+    title,
+    resolution_notes: resolutionNotes || '',
+    improvement_suggestion: improvementSuggestion || ''
+  }, type, resolutionNotes || '', improvementSuggestion || '');
 }
 
 // Set quick period for reports
@@ -2743,24 +2925,41 @@ function generateClientPrintHtml(startDate, endDate) {
     year: 'numeric'
   });
 
-  const rowsHtml = tickets.map((t, idx) => `
+  const fmtDt = typeof window.formatDateTimeId === 'function'
+    ? window.formatDateTimeId
+    : (iso => (iso ? new Date(iso).toLocaleString('id-ID') : '-'));
+  const fmtDur = typeof window.formatWorkDurationId === 'function'
+    ? window.formatWorkDurationId
+    : (() => '-');
+
+  const rowsHtml = tickets.map((t, idx) => {
+    const docUrl = t.proof_photo_url || t.photo_url || '';
+    const docLabel = t.proof_photo_url ? 'Bukti Selesai' : (t.photo_url ? 'Foto Lapor' : '');
+    const docCell = docUrl
+      ? `<div style="text-align:center;"><img src="${esc(docUrl)}" alt="${esc(docLabel)}" style="width:46px;height:46px;object-fit:cover;border-radius:4px;border:1px solid #cbd5e1;display:block;margin:0 auto 2px;"><span style="font-size:6.5pt;color:#475569;">${esc(docLabel)}</span></div>`
+      : '<span style="color:#94a3b8;">-</span>';
+    const actionText = esc(t.resolution_notes || t.pending_reason || '-');
+    const suggestionText = esc(t.improvement_suggestion || '-');
+
+    return `
     <tr>
       <td style="text-align: center;">${idx + 1}</td>
       <td style="font-weight: bold; white-space: nowrap;">${esc(t.ticket_no)}</td>
-      <td style="white-space: nowrap; text-align: center; font-size: 8pt;">${new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+      <td style="white-space: nowrap; text-align: center; font-size: 7.5pt;">${esc(fmtDt(t.created_at))}</td>
       <td><strong>${esc(t.room_name)}</strong></td>
-      <td>${esc(t.category_name)}</td>
       <td>${esc(t.reporter_name)}</td>
-      <td style="text-align: center;">
-        <span class="badge ${esc(t.priority || 'medium')}">${esc((t.priority || 'medium').toUpperCase())}</span>
-      </td>
-      <td><strong>${esc(t.title)}</strong><br><small style="color:#64748b;">${esc((t.description || '').substring(0, 80))}...</small></td>
+      <td><strong>${esc(t.title)}</strong><br><small style="color:#0369a1;">${esc(t.category_name)}</small><br><small style="color:#64748b;">${esc((t.description || '').substring(0, 70))}</small></td>
       <td>${t.assigned_to_name ? esc(t.assigned_to_name) : '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
+      <td style="text-align: center; white-space: nowrap; font-size: 7.5pt; font-weight: bold;">${esc(fmtDur(t))}</td>
+      <td style="font-size: 7.5pt;">${actionText}</td>
+      <td style="font-size: 7.5pt;">${suggestionText}</td>
+      <td style="text-align: center;">${docCell}</td>
       <td style="text-align: center;">
         <span class="status-badge ${esc(t.status)}">${esc(String(t.status || '').toUpperCase())}</span>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html lang="id">
@@ -2842,8 +3041,8 @@ function generateClientPrintHtml(startDate, endDate) {
       border-radius: 6px;
       margin-top: 10px;
     }
-    table { width: 100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 8.5pt; min-width: 850px; }
-    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; }
+    table { width: 100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 7.5pt; min-width: 980px; }
+    th, td { border: 1px solid #cbd5e1; padding: 5px 6px; vertical-align: middle; word-break: break-word; }
     th { background-color: #f1f5f9; font-weight: bold; text-align: center; color: #334155; }
     
     .badge { padding: 2px 6px; border-radius: 4px; font-size: 7pt; font-weight: bold; color: #fff; display: inline-block; }
@@ -2943,20 +3142,22 @@ function generateClientPrintHtml(startDate, endDate) {
     <table>
       <thead>
         <tr>
-          <th style="width: 35px; text-align: center;">No</th>
-          <th style="width: 110px; text-align: center; white-space: nowrap;">No Tiket</th>
-          <th style="width: 90px; text-align: center; white-space: nowrap;">Tanggal</th>
-          <th style="min-width: 120px;">Ruangan / Unit</th>
-          <th style="min-width: 100px;">Kategori</th>
-          <th style="min-width: 100px;">Pelapor</th>
-          <th style="width: 75px; text-align: center;">Prioritas</th>
-          <th style="min-width: 160px;">Uraian Kendala</th>
-          <th style="min-width: 110px;">Teknisi</th>
-          <th style="width: 85px; text-align: center;">Status</th>
+          <th style="width: 26px; text-align: center;">No</th>
+          <th style="width: 92px; text-align: center; white-space: nowrap;">No Tiket</th>
+          <th style="width: 84px; text-align: center; white-space: nowrap;">Tanggal &amp; Jam</th>
+          <th style="min-width: 90px;">Ruangan / Unit</th>
+          <th style="min-width: 78px;">Pelapor</th>
+          <th style="min-width: 120px;">Kendala</th>
+          <th style="min-width: 80px;">Teknisi</th>
+          <th style="width: 72px; text-align: center;">Lama Pengerjaan</th>
+          <th style="min-width: 110px;">Tindak Lanjut</th>
+          <th style="min-width: 105px;">Usulan Perbaikan</th>
+          <th style="width: 68px; text-align: center;">Dokumentasi</th>
+          <th style="width: 72px; text-align: center;">Status</th>
         </tr>
       </thead>
       <tbody>
-        ${rowsHtml || '<tr><td colspan="10" style="text-align: center; padding: 20px;">Tidak ada data tiket untuk filter ini.</td></tr>'}
+        ${rowsHtml || '<tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data tiket untuk filter ini.</td></tr>'}
       </tbody>
     </table>
   </div>
@@ -3000,11 +3201,18 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.2');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.4');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
     }
+
+    const fmtDt = typeof window.formatDateTimeId === 'function'
+      ? window.formatDateTimeId
+      : (iso => (iso ? new Date(iso).toLocaleString('id-ID') : '-'));
+    const fmtDur = typeof window.formatWorkDurationId === 'function'
+      ? window.formatWorkDurationId
+      : (() => '-');
 
     const workbook = new window.ExcelJS.Workbook();
     workbook.creator = 'SIM-ETIKET IT RSUD Labuha';
@@ -3012,17 +3220,21 @@ async function exportExcel() {
 
     sheet.columns = [
       { header: 'No', key: 'no', width: 6 },
-      { header: 'Nomor Tiket', key: 'ticket_no', width: 20 },
-      { header: 'Waktu Lapor', key: 'created_at', width: 20 },
-      { header: 'Ruangan / Unit', key: 'room_name', width: 28 },
-      { header: 'Kategori', key: 'category_name', width: 24 },
+      { header: 'Nomor Tiket', key: 'ticket_no', width: 18 },
+      { header: 'Tanggal & Jam Lapor', key: 'created_at', width: 20 },
+      { header: 'Tanggal & Jam Selesai', key: 'resolved_at', width: 20 },
+      { header: 'Lama Pengerjaan', key: 'duration', width: 18 },
+      { header: 'Ruangan / Unit', key: 'room_name', width: 26 },
+      { header: 'Kategori', key: 'category_name', width: 22 },
       { header: 'Prioritas', key: 'priority', width: 12 },
-      { header: 'Pelapor', key: 'reporter_name', width: 22 },
+      { header: 'Pelapor', key: 'reporter_name', width: 20 },
       { header: 'No. WhatsApp', key: 'reporter_phone', width: 16 },
-      { header: 'Keluhan', key: 'description', width: 40 },
+      { header: 'Keluhan', key: 'description', width: 34 },
       { header: 'Teknisi Bertugas', key: 'assigned_to_name', width: 22 },
       { header: 'Status', key: 'status', width: 14 },
-      { header: 'Catatan Penyelesaian', key: 'resolution_notes', width: 32 }
+      { header: 'Tindak Lanjut', key: 'resolution_notes', width: 32 },
+      { header: 'Usulan Perbaikan', key: 'improvement_suggestion', width: 30 },
+      { header: 'Dokumentasi', key: 'documentation', width: 16 }
     ];
 
     const headerRow = sheet.getRow(1);
@@ -3032,10 +3244,20 @@ async function exportExcel() {
     headerRow.height = 24;
 
     tickets.forEach((t, idx) => {
-      sheet.addRow({
+      const docUrl = t.proof_photo_url || t.photo_url || '';
+      const dataImgMatch = typeof docUrl === 'string'
+        ? docUrl.match(/^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=]+)$/i)
+        : null;
+      const docLabel = t.proof_photo_url && t.photo_url
+        ? 'Bukti & Kendala'
+        : (t.proof_photo_url ? 'Foto Bukti Selesai' : (t.photo_url ? 'Foto Kendala' : '-'));
+
+      const row = sheet.addRow({
         no: idx + 1,
         ticket_no: t.ticket_no || '-',
-        created_at: t.created_at ? new Date(t.created_at).toLocaleString('id-ID') : '-',
+        created_at: fmtDt(t.created_at),
+        resolved_at: fmtDt(t.resolved_at || t.actual_resolve_time || t.closed_at),
+        duration: fmtDur(t),
         room_name: t.room_name || '-',
         category_name: t.category_name || '-',
         priority: String(t.priority || 'medium').toUpperCase(),
@@ -3044,7 +3266,28 @@ async function exportExcel() {
         description: t.description || t.title || '-',
         assigned_to_name: t.assigned_to_name || 'Belum Ditugaskan',
         status: String(t.status || 'open').toUpperCase(),
-        resolution_notes: t.resolution_notes || t.pending_reason || '-'
+        resolution_notes: t.resolution_notes || t.pending_reason || '-',
+        improvement_suggestion: t.improvement_suggestion || '-',
+        documentation: dataImgMatch ? '' : docLabel
+      });
+
+      if (dataImgMatch) {
+        try {
+          const ext = dataImgMatch[1].toLowerCase() === 'png' ? 'png' : 'jpeg';
+          const imgId = workbook.addImage({ base64: dataImgMatch[2], extension: ext });
+          row.height = 48;
+          sheet.addImage(imgId, {
+            tl: { col: 15 + 0.12, row: row.number - 1 + 0.08 },
+            ext: { width: 68, height: 48 },
+            editAs: 'oneCell'
+          });
+        } catch (imgErr) {
+          row.getCell('documentation').value = docLabel;
+        }
+      }
+
+      row.eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', wrapText: true };
       });
     });
 
@@ -3057,19 +3300,19 @@ async function exportExcel() {
     sheet.addRow([]);
     const sigHeaderRow = sheet.addRow([]);
     sigHeaderRow.getCell(3).value = 'Mengetahui, Direktur RSUD Labuha';
-    sigHeaderRow.getCell(10).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
+    sigHeaderRow.getCell(12).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
     sigHeaderRow.getCell(3).font = { bold: true };
-    sigHeaderRow.getCell(10).font = { bold: true };
+    sigHeaderRow.getCell(12).font = { bold: true };
     sheet.addRow([]);
     sheet.addRow([]);
     const sigNamesRow = sheet.addRow([]);
     sigNamesRow.getCell(3).value = signers.directorName;
-    sigNamesRow.getCell(10).value = signers.headName;
+    sigNamesRow.getCell(12).value = signers.headName;
     sigNamesRow.getCell(3).font = { bold: true, underline: true };
-    sigNamesRow.getCell(10).font = { bold: true, underline: true };
+    sigNamesRow.getCell(12).font = { bold: true, underline: true };
     const sigNipsRow = sheet.addRow([]);
     sigNipsRow.getCell(3).value = signers.directorNip;
-    sigNipsRow.getCell(10).value = signers.headNip;
+    sigNipsRow.getCell(12).value = signers.headNip;
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `Rekap-ETiket-RSUD-Labuha-${new Date().toISOString().slice(0, 10)}.xlsx`;

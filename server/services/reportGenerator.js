@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const ExcelJS = require('exceljs');
 const { query } = require('../config/db');
 
@@ -9,6 +11,65 @@ function escapeReportHtml(value) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatReportDateTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+}
+
+function formatReportDuration(ticket) {
+  if (!ticket) return '-';
+  const startAt = ticket.assigned_at || ticket.actual_response_time || ticket.created_at;
+  const endAt = ticket.resolved_at || ticket.actual_resolve_time || ticket.closed_at;
+  if (!endAt) {
+    return (ticket.status === 'resolved' || ticket.status === 'closed') ? 'Selesai' : 'Dalam Proses';
+  }
+  const s = new Date(startAt).getTime();
+  const e = new Date(endAt).getTime();
+  const fallbackStart = new Date(ticket.created_at).getTime();
+  const useS = (!Number.isNaN(s) && !Number.isNaN(e) && e >= s) ? s : fallbackStart;
+  if (Number.isNaN(useS) || Number.isNaN(e) || e < useS) return '-';
+  const diffSec = Math.floor((e - useS) / 1000);
+  if (diffSec < 60) return '< 1 mnt';
+  const totalMin = Math.round(diffSec / 60);
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  const parts = [];
+  if (days > 0) parts.push(`${days} hr`);
+  if (hours > 0) parts.push(`${hours} jam`);
+  if (mins > 0) parts.push(`${mins} mnt`);
+  return parts.join(' ') || '< 1 mnt';
+}
+
+function resolveDocImageBuffer(photoUrl) {
+  if (!photoUrl || typeof photoUrl !== 'string') return null;
+  const dataMatch = photoUrl.match(/^data:image\/(png|jpe?g);base64,([A-Za-z0-9+/=]+)$/i);
+  if (dataMatch) {
+    const ext = dataMatch[1].toLowerCase() === 'png' ? 'png' : 'jpeg';
+    return { buffer: Buffer.from(dataMatch[2], 'base64'), extension: ext };
+  }
+  if (photoUrl.startsWith('/uploads/')) {
+    const absPath = path.join(__dirname, '..', photoUrl.replace(/^\/+/, ''));
+    if (fs.existsSync(absPath)) {
+      const extName = path.extname(absPath).toLowerCase();
+      if (extName === '.png' || extName === '.jpg' || extName === '.jpeg') {
+        return {
+          buffer: fs.readFileSync(absPath),
+          extension: extName === '.png' ? 'png' : 'jpeg'
+        };
+      }
+    }
+  }
+  return null;
 }
 
 async function getSettingsConfig() {
@@ -74,18 +135,20 @@ class ReportGenerator {
     sheet1.columns = [
       { header: 'No', key: 'no', width: 6 },
       { header: 'No Tiket', key: 'ticket_no', width: 18 },
-      { header: 'Tanggal Lapor', key: 'date', width: 20 },
-      { header: 'Ruangan / Unit', key: 'room_name', width: 30 },
-      { header: 'Kategori Kendala', key: 'category_name', width: 28 },
-      { header: 'Prioritas', key: 'priority', width: 14 },
-      { header: 'Pelapor', key: 'reporter_name', width: 22 },
+      { header: 'Tanggal & Jam Lapor', key: 'date', width: 20 },
+      { header: 'Tanggal & Jam Selesai', key: 'resolved_date', width: 20 },
+      { header: 'Lama Pengerjaan', key: 'duration', width: 18 },
+      { header: 'Ruangan / Unit', key: 'room_name', width: 26 },
+      { header: 'Kategori Kendala', key: 'category_name', width: 24 },
+      { header: 'Prioritas', key: 'priority', width: 12 },
+      { header: 'Pelapor', key: 'reporter_name', width: 20 },
       { header: 'Kontak WA', key: 'reporter_phone', width: 16 },
       { header: 'Status', key: 'status', width: 14 },
-      { header: 'Teknisi IT', key: 'assigned_to_name', width: 25 },
-      { header: 'Judul Kendala', key: 'title', width: 35 },
-      { header: 'Solusi / Catatan Selesai', key: 'resolution_notes', width: 35 },
-      { header: 'Rating Kepuasan', key: 'satisfaction_rating', width: 16 },
-      { header: 'SLA Status', key: 'sla_status', width: 14 }
+      { header: 'Teknisi IT', key: 'assigned_to_name', width: 22 },
+      { header: 'Keluhan', key: 'title', width: 32 },
+      { header: 'Tindak Lanjut', key: 'resolution_notes', width: 32 },
+      { header: 'Usulan Perbaikan', key: 'improvement_suggestion', width: 30 },
+      { header: 'Dokumentasi', key: 'documentation', width: 16 }
     ];
 
     // Style Header Sheet 1
@@ -108,10 +171,18 @@ class ReportGenerator {
 
     // Populate rows
     tickets.forEach((t, idx) => {
+      const docUrl = t.proof_photo_url || t.photo_url || '';
+      const imgData = resolveDocImageBuffer(docUrl);
+      const docLabel = t.proof_photo_url && t.photo_url
+        ? 'Bukti & Kendala'
+        : (t.proof_photo_url ? 'Foto Bukti Selesai' : (t.photo_url ? 'Foto Kendala' : '-'));
+
       const row = sheet1.addRow({
         no: idx + 1,
         ticket_no: t.ticket_no,
-        date: new Date(t.created_at).toLocaleString('id-ID'),
+        date: formatReportDateTime(t.created_at),
+        resolved_date: formatReportDateTime(t.resolved_at || t.actual_resolve_time || t.closed_at),
+        duration: formatReportDuration(t),
         room_name: t.room_name,
         category_name: t.category_name,
         priority: (t.priority || '').toUpperCase(),
@@ -119,14 +190,28 @@ class ReportGenerator {
         reporter_phone: t.reporter_phone,
         status: (t.status || '').toUpperCase(),
         assigned_to_name: t.assigned_to_name || 'Belum Ditugaskan',
-        title: t.title,
-        resolution_notes: t.resolution_notes || '-',
-        satisfaction_rating: t.satisfaction_rating ? `${t.satisfaction_rating} / 5 Bintang` : 'Belum Diisi',
-        sla_status: (t.sla_status || 'ON TRACK').toUpperCase()
+        title: t.description || t.title || '-',
+        resolution_notes: t.resolution_notes || t.pending_reason || '-',
+        improvement_suggestion: t.improvement_suggestion || '-',
+        documentation: imgData ? '' : docLabel
       });
 
+      if (imgData) {
+        try {
+          const imgId = workbook.addImage({ buffer: imgData.buffer, extension: imgData.extension });
+          row.height = 48;
+          sheet1.addImage(imgId, {
+            tl: { col: 15 + 0.12, row: row.number - 1 + 0.08 },
+            ext: { width: 68, height: 48 },
+            editAs: 'oneCell'
+          });
+        } catch (imgErr) {
+          row.getCell('documentation').value = docLabel;
+        }
+      }
+
       row.eachCell((cell) => {
-        cell.alignment = { vertical: 'middle' };
+        cell.alignment = { vertical: 'middle', wrapText: true };
         cell.border = {
           top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
           left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
@@ -200,19 +285,19 @@ class ReportGenerator {
     sheet1.addRow([]);
     const sigTitleRow = sheet1.addRow([]);
     sigTitleRow.getCell(3).value = 'Mengetahui, Direktur RSUD Labuha';
-    sigTitleRow.getCell(10).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
+    sigTitleRow.getCell(12).value = `Labuha, ${todayStr} • Kepala Instalasi SIMRS & IT`;
     sigTitleRow.getCell(3).font = { bold: true };
-    sigTitleRow.getCell(10).font = { bold: true };
+    sigTitleRow.getCell(12).font = { bold: true };
     sheet1.addRow([]);
     sheet1.addRow([]);
     const sigNameRow = sheet1.addRow([]);
     sigNameRow.getCell(3).value = signers.directorName;
-    sigNameRow.getCell(10).value = signers.headName;
+    sigNameRow.getCell(12).value = signers.headName;
     sigNameRow.getCell(3).font = { bold: true, underline: true };
-    sigNameRow.getCell(10).font = { bold: true, underline: true };
+    sigNameRow.getCell(12).font = { bold: true, underline: true };
     const sigNipRow = sheet1.addRow([]);
     sigNipRow.getCell(3).value = signers.directorNip;
-    sigNipRow.getCell(10).value = signers.headNip;
+    sigNipRow.getCell(12).value = signers.headNip;
 
     return workbook;
   }
@@ -254,24 +339,34 @@ class ReportGenerator {
     const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
     const openCount = tickets.filter(t => t.status === 'open' || t.status === 'assigned').length;
 
-    const rowsHtml = tickets.map((t, idx) => `
+    const rowsHtml = tickets.map((t, idx) => {
+      const docUrl = t.proof_photo_url || t.photo_url || '';
+      const docLabel = t.proof_photo_url ? 'Bukti Selesai' : (t.photo_url ? 'Foto Lapor' : '');
+      const docCell = docUrl
+        ? `<div style="text-align:center;"><img src="${escapeReportHtml(docUrl)}" alt="${escapeReportHtml(docLabel)}" style="width:46px;height:46px;object-fit:cover;border-radius:4px;border:1px solid #cbd5e1;display:block;margin:0 auto 2px;"><span style="font-size:6.5pt;color:#475569;">${escapeReportHtml(docLabel)}</span></div>`
+        : '<span style="color:#94a3b8;">-</span>';
+      const actionText = escapeReportHtml(t.resolution_notes || t.pending_reason || '-');
+      const suggestionText = escapeReportHtml(t.improvement_suggestion || '-');
+
+      return `
       <tr>
         <td style="text-align: center;">${idx + 1}</td>
-        <td style="font-weight: bold; white-space: nowrap;">${t.ticket_no}</td>
-        <td style="white-space: nowrap; text-align: center; font-size: 8pt;">${new Date(t.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-        <td><strong>${t.room_name}</strong></td>
-        <td>${t.category_name}</td>
-        <td>${t.reporter_name}</td>
+        <td style="font-weight: bold; white-space: nowrap;">${escapeReportHtml(t.ticket_no)}</td>
+        <td style="white-space: nowrap; text-align: center; font-size: 7.5pt;">${formatReportDateTime(t.created_at)}</td>
+        <td><strong>${escapeReportHtml(t.room_name)}</strong></td>
+        <td>${escapeReportHtml(t.reporter_name)}</td>
+        <td><strong>${escapeReportHtml(t.title)}</strong><br><small style="color:#0369a1;">${escapeReportHtml(t.category_name)}</small><br><small style="color:#64748b;">${escapeReportHtml((t.description || '').substring(0, 70))}</small></td>
+        <td>${t.assigned_to_name ? escapeReportHtml(t.assigned_to_name) : '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
+        <td style="text-align: center; white-space: nowrap; font-size: 7.5pt; font-weight: bold;">${escapeReportHtml(formatReportDuration(t))}</td>
+        <td style="font-size: 7.5pt;">${actionText}</td>
+        <td style="font-size: 7.5pt;">${suggestionText}</td>
+        <td style="text-align: center;">${docCell}</td>
         <td style="text-align: center;">
-          <span class="badge ${t.priority}">${t.priority.toUpperCase()}</span>
-        </td>
-        <td><strong>${t.title}</strong><br><small style="color:#64748b;">${t.description.substring(0, 80)}...</small></td>
-        <td>${t.assigned_to_name || '<em style="color:#94a3b8;">Belum Ditugaskan</em>'}</td>
-        <td style="text-align: center;">
-          <span class="status-badge ${t.status}">${t.status.toUpperCase()}</span>
+          <span class="status-badge ${escapeReportHtml(t.status)}">${escapeReportHtml(String(t.status || '').toUpperCase())}</span>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const todayStr = new Date().toLocaleDateString('id-ID', {
       day: 'numeric',
@@ -361,8 +456,8 @@ class ReportGenerator {
             border-radius: 6px;
             margin-top: 10px;
           }
-          table { width: 100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 8.5pt; min-width: 850px; }
-          th, td { border: 1px solid #cbd5e1; padding: 6px 8px; vertical-align: middle; }
+          table { width: 100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 7.5pt; min-width: 980px; }
+          th, td { border: 1px solid #cbd5e1; padding: 5px 6px; vertical-align: middle; word-break: break-word; }
           th { background-color: #f1f5f9; font-weight: bold; text-align: center; color: #334155; }
           
           .badge { padding: 2px 6px; border-radius: 4px; font-size: 7pt; font-weight: bold; color: #fff; display: inline-block; }
@@ -462,20 +557,22 @@ class ReportGenerator {
           <table>
             <thead>
               <tr>
-                <th style="width: 35px; text-align: center;">No</th>
-                <th style="width: 110px; text-align: center; white-space: nowrap;">No Tiket</th>
-                <th style="width: 90px; text-align: center; white-space: nowrap;">Tanggal</th>
-                <th style="min-width: 120px;">Ruangan / Unit</th>
-                <th style="min-width: 100px;">Kategori</th>
-                <th style="min-width: 100px;">Pelapor</th>
-                <th style="width: 75px; text-align: center;">Prioritas</th>
-                <th style="min-width: 160px;">Uraian Kendala</th>
-                <th style="min-width: 110px;">Teknisi</th>
-                <th style="width: 85px; text-align: center;">Status</th>
+                <th style="width: 26px; text-align: center;">No</th>
+                <th style="width: 92px; text-align: center; white-space: nowrap;">No Tiket</th>
+                <th style="width: 84px; text-align: center; white-space: nowrap;">Tanggal &amp; Jam</th>
+                <th style="min-width: 90px;">Ruangan / Unit</th>
+                <th style="min-width: 78px;">Pelapor</th>
+                <th style="min-width: 120px;">Kendala</th>
+                <th style="min-width: 80px;">Teknisi</th>
+                <th style="width: 72px; text-align: center;">Lama Pengerjaan</th>
+                <th style="min-width: 110px;">Tindak Lanjut</th>
+                <th style="min-width: 105px;">Usulan Perbaikan</th>
+                <th style="width: 68px; text-align: center;">Dokumentasi</th>
+                <th style="width: 72px; text-align: center;">Status</th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="10" style="text-align: center; padding: 20px;">Tidak ada data tiket untuk filter ini.</td></tr>'}
+              ${rowsHtml || '<tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data tiket untuk filter ini.</td></tr>'}
             </tbody>
           </table>
         </div>
