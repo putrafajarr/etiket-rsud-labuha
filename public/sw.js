@@ -1,17 +1,17 @@
-const CACHE_NAME = 'etiket-rsud-labuha-v9';
+const CACHE_NAME = 'etiket-rsud-labuha-v10';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/lapor.html',
   '/track.html',
   '/qrcodes.html',
-  '/css/custom.css?v=4.5',
-  '/js/supabase-client.js?v=4.5',
-  '/js/qrcode.min.js?v=4.5',
-  '/js/bcrypt.min.js?v=4.5',
-  '/js/sound.js?v=4.5',
-  '/js/app.js?v=4.5',
-  '/js/lapor.js?v=4.5',
+  '/css/custom.css?v=4.6',
+  '/js/supabase-client.js?v=4.6',
+  '/js/qrcode.min.js?v=4.6',
+  '/js/bcrypt.min.js?v=4.6',
+  '/js/sound.js?v=4.6',
+  '/js/app.js?v=4.6',
+  '/js/lapor.js?v=4.6',
   '/manifest.json'
 ];
 
@@ -44,6 +44,7 @@ self.addEventListener('fetch', (e) => {
     reqUrl.includes('/api/') ||
     reqUrl.includes('/socket.io/') ||
     reqUrl.includes('/downloads/') ||
+    reqUrl.includes('/version.json') ||
     reqUrl.includes('supabase.co')
   ) {
     return;

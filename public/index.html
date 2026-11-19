@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.5">
+  <link rel="stylesheet" href="/css/custom.css?v=4.6">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -107,6 +107,22 @@
     </div>
   </header>
 
+  <!-- In-App Game-Style Update Banner (muncul otomatis jika ada versi terbaru) -->
+  <div id="appUpdateBanner" class="hidden bg-gradient-to-r from-sky-700 via-sky-600 to-teal-600 text-white px-3 sm:px-6 py-2.5 shadow-md z-20">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
+      <div class="flex items-center space-x-2 min-w-0">
+        <span class="text-base shrink-0">🚀</span>
+        <div class="min-w-0">
+          <span id="appUpdateBannerText" class="font-bold">Pembaruan Sistem Tersedia!</span>
+          <span id="appUpdateBannerNotes" class="text-sky-100 block sm:inline sm:ml-1.5 text-[11px] truncate"></span>
+        </div>
+      </div>
+      <button type="button" onclick="applyInAppWebUpdate()" class="px-3.5 py-1.5 bg-white text-sky-800 hover:bg-sky-50 font-black rounded-lg text-[11px] transition shadow-sm shrink-0 active:scale-95">
+        🔄 Update Sekarang
+      </button>
+    </div>
+  </div>
+
   <!-- Mobile Drawer Backdrop & Slide-Over Panel -->
   <div id="mobileDrawerBackdrop" onclick="closeMobileMenu()"></div>
   <div id="mobileDrawer">
@@ -180,6 +196,10 @@
       </button>
 
       <div class="pt-3 mt-2 border-t border-slate-100 space-y-1">
+        <button onclick="checkForWebAppUpdate(true); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sky-700 hover:bg-sky-50 transition text-left font-bold">
+          <i data-lucide="refresh-cw" class="w-4 h-4 text-sky-600"></i>
+          <span>Cek Update Aplikasi (v4.6)</span>
+        </button>
         <button onclick="testMobileHomeNotification(); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition text-left">
           <i data-lucide="bell-ring" class="w-4 h-4 text-sky-600"></i>
           <span>Tes Notif HP (Alarm)</span>
@@ -811,6 +831,10 @@
                 <i data-lucide="server" class="w-3.5 h-3.5"></i>
                 <span>Ganti IP Server di APK</span>
               </button>
+              <button type="button" onclick="checkForWebAppUpdate(true)" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center space-x-1.5">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Cek Update Aplikasi (v4.6)</span>
+              </button>
             </div>
             <p class="text-[10px] text-amber-900/80">
               💡 <b>Tips HP Xiaomi / Oppo / Vivo / Samsung:</b> Jika notifikasi belum muncul di atas layar, klik <b>Buka Izin Notif HP</b> di atas lalu aktifkan <i>Notifikasi Mengambang (Floating/Heads-up)</i> &amp; <i>Tampilkan di Layar Kunci</i>.
@@ -1100,20 +1124,23 @@
                 ⚠️ Wajib Kirim WA sebelum Selesai
               </span>
             </div>
-            <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-sm">
+            <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col gap-3 shadow-sm">
               <div class="flex items-center space-x-2.5">
                 <span class="text-2xl shrink-0">💬</span>
                 <div>
                   <p class="text-xs font-bold text-emerald-900">Kirim WhatsApp ke Pelapor (1-Klik)</p>
-                  <p class="text-[10px] text-emerald-700">Isi WA mengambil Hasil Pengerjaan, Usulan Perbaikan, &amp; foto bukti (gambar langsung di APK v1.5 / link foto di Web).</p>
+                  <p class="text-[10px] text-emerald-700">Isi WA otomatis dari Hasil Pengerjaan, Usulan Perbaikan, &amp; link foto. Gunakan tombol <b>Kirim Gambar ke WA</b> bila ingin langsung menempelkan file foto di HP (mendukung APK v1.4+).</p>
                 </div>
               </div>
-              <div class="flex items-center space-x-2 w-full sm:w-auto">
-                <button type="button" onclick="sendWhatsAppDirect('otw')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
+              <div class="flex flex-wrap items-center gap-2 w-full">
+                <button type="button" onclick="sendWhatsAppDirect('otw')" class="flex-1 min-w-[110px] px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
                   <span>🚀 OTW Lokasi</span>
                 </button>
-                <button type="button" onclick="sendWhatsAppDirect('done')" class="flex-1 sm:flex-initial px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
+                <button type="button" onclick="sendWhatsAppDirect('done')" class="flex-1 min-w-[125px] px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
                   <span>✅ Kabari Selesai</span>
+                </button>
+                <button type="button" onclick="sendWaPhotoDirect()" class="flex-1 min-w-[130px] px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm" title="Bagikan file foto bukti + salin penjelasan ke WhatsApp (berjalan di APK v1.4 ke atas)">
+                  <span>🖼️ Kirim Gambar (WA)</span>
                 </button>
               </div>
             </div>
@@ -1412,11 +1439,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.5"></script>
-  <script src="/js/bcrypt.min.js?v=4.5"></script>
-  <script src="/js/supabase-client.js?v=4.5"></script>
-  <script src="/js/sound.js?v=4.5"></script>
-  <script src="/js/app.js?v=4.5"></script>
+  <script src="/js/qrcode.min.js?v=4.6"></script>
+  <script src="/js/bcrypt.min.js?v=4.6"></script>
+  <script src="/js/supabase-client.js?v=4.6"></script>
+  <script src="/js/sound.js?v=4.6"></script>
+  <script src="/js/app.js?v=4.6"></script>
 </body>
 </html>
 

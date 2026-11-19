@@ -1,4 +1,8 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
+const APP_WEB_VERSION = '4.6';
+let latestServerVersionInfo = null;
+let updateCheckInFlight = false;
+
 let socket = null;
 let allTickets = [];
 let allRooms = [];
@@ -30,6 +34,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   ]);
   initSocket();
   startAutoSync();
+  startInAppUpdateWatcher();
   lucide.createIcons();
 
   // Keep internal page links inside Capacitor APK WebView so they never open external broken localhost tabs
@@ -55,6 +60,136 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }, { once: true });
 });
+
+function isNewerWebVersion(remoteVer, localVer) {
+  const a = String(remoteVer || '').split('.').map(n => parseInt(n, 10) || 0);
+  const b = String(localVer || '').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const va = a[i] || 0;
+    const vb = b[i] || 0;
+    if (va > vb) return true;
+    if (va < vb) return false;
+  }
+  return false;
+}
+
+function showInAppUpdateBanner(info) {
+  const banner = document.getElementById('appUpdateBanner');
+  const txt = document.getElementById('appUpdateBannerText');
+  const notes = document.getElementById('appUpdateBannerNotes');
+  if (!banner) return;
+  if (txt) txt.textContent = `Pembaruan Aplikasi Tersedia (v${info.version})`;
+  if (notes) notes.textContent = info.notes || 'Klik Update Sekarang untuk menerapkan versi terbaru tanpa install APK.';
+  banner.classList.remove('hidden');
+}
+
+async function applyInAppWebUpdate(targetVersion) {
+  const ver = targetVersion || latestServerVersionInfo?.version || String(Date.now());
+  try {
+    Swal.fire({
+      title: 'Memperbarui Aplikasi...',
+      text: `Mengunduh pembaruan sistem (v${ver}) langsung di dalam aplikasi.`,
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+  } catch (e) {}
+
+  try {
+    sessionStorage.removeItem('dismissed_web_ver');
+  } catch (e) {}
+
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
+    }
+  } catch (e) {
+    console.warn('Cache cleanup on OTA update:', e);
+  }
+
+  const basePath = (window.location.pathname && window.location.pathname !== '/') ? window.location.pathname : '/index.html';
+  window.location.replace(`${basePath}?app_v=${encodeURIComponent(ver)}&t=${Date.now()}`);
+}
+
+async function checkForWebAppUpdate(manual = false) {
+  if (updateCheckInFlight) return;
+  updateCheckInFlight = true;
+  try {
+    const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Gagal memeriksa pembaruan server');
+    const info = await res.json();
+    if (!info || !info.version) return;
+
+    latestServerVersionInfo = info;
+    if (isNewerWebVersion(info.version, APP_WEB_VERSION)) {
+      showInAppUpdateBanner(info);
+
+      let dismissed = '';
+      try { dismissed = sessionStorage.getItem('dismissed_web_ver') || ''; } catch (e) {}
+      const ticketModalOpen = !document.getElementById('ticketModal')?.classList.contains('hidden');
+      const loginOverlayOpen = !document.getElementById('loginOverlay')?.classList.contains('hidden');
+      const hasBlockingDialog = (typeof Swal !== 'undefined' && Swal.isVisible()) || ticketModalOpen || loginOverlayOpen;
+
+      if (manual || (dismissed !== info.version && !hasBlockingDialog)) {
+        const ans = await Swal.fire({
+          icon: 'info',
+          title: `🚀 Pembaruan Tersedia (v${info.version})`,
+          html: `
+            <div class="text-left text-xs space-y-2">
+              <p class="text-slate-700 leading-relaxed">${esc(info.notes || 'Versi baru aplikasi SIM-ETIKET telah siap.')}</p>
+              <p class="text-emerald-700 font-semibold">✓ Pembaruan langsung di dalam aplikasi (tanpa download &amp; install ulang APK).</p>
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '🔄 Update Sekarang',
+          cancelButtonText: 'Nanti',
+          confirmButtonColor: '#0284c7'
+        });
+        if (ans.isConfirmed) {
+          await applyInAppWebUpdate(info.version);
+        } else {
+          try { sessionStorage.setItem('dismissed_web_ver', info.version); } catch (e) {}
+        }
+      }
+    } else if (manual) {
+      Swal.fire({
+        icon: 'success',
+        title: 'Aplikasi Sudah Versi Terbaru',
+        text: `Anda sedang menggunakan SIM-ETIKET versi terbaru (v${APP_WEB_VERSION}).`,
+        timer: 2200,
+        showConfirmButton: false
+      });
+    }
+  } catch (err) {
+    if (manual) {
+      Swal.fire('Info Pembaruan', err.message || 'Tidak dapat menghubungi server pembaruan saat ini.', 'info');
+    }
+  } finally {
+    updateCheckInFlight = false;
+  }
+}
+
+function startInAppUpdateWatcher() {
+  setTimeout(() => checkForWebAppUpdate(false), 1800);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      checkForWebAppUpdate(false);
+    }
+  });
+  try {
+    if (window.Capacitor?.Plugins?.App?.addListener) {
+      window.Capacitor.Plugins.App.addListener('appStateChange', (state) => {
+        if (state && state.isActive) checkForWebAppUpdate(false);
+      });
+    }
+  } catch (e) {}
+  setInterval(() => checkForWebAppUpdate(false), 90000);
+}
 
 async function initMobileNativeBridge() {
   try {
@@ -2838,6 +2973,120 @@ async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
   return true;
 }
 
+async function copyTextSafe(text) {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return Boolean(ok);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function sendWaPhotoDirect() {
+  if (!selectedTicketForModal) return;
+  const t = selectedTicketForModal;
+  const isDone = t.status === 'resolved' || t.status === 'closed';
+  if (isDone) {
+    Swal.fire('Tiket Terkunci', 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen.', 'info');
+    return;
+  }
+
+  const notesEl = document.getElementById('modalResolutionNotes');
+  const suggEl = document.getElementById('modalImprovementSuggestion');
+  const proofInput = document.getElementById('modalProofPhoto');
+  const liveNotes = (notesEl ? notesEl.value : (t.resolution_notes || '')).trim();
+  const liveSuggestion = (suggEl ? suggEl.value : (t.improvement_suggestion || '')).trim();
+  const selectedProofFile = proofInput && proofInput.files && proofInput.files[0] ? proofInput.files[0] : null;
+
+  const imgDataUrl = await resolveImageDataUrlForShare(t, selectedProofFile);
+  if (!imgDataUrl || !imgDataUrl.startsWith('data:image/')) {
+    Swal.fire({
+      icon: 'warning',
+      title: 'Belum Ada Foto',
+      text: 'Pilih terlebih dahulu "Foto Bukti Perbaikan" atau pastikan tiket memiliki lampiran foto kendala.'
+    });
+    return;
+  }
+
+  await saveTicketDraftBeforeWa(t, liveNotes, liveSuggestion, selectedProofFile);
+  const message = buildWhatsAppMessage(t, 'done', liveNotes, liveSuggestion, { hasPhoto: true });
+  await copyTextSafe(message);
+
+  let cleanPhone = String(t.reporter_phone || '').replace(/\D/g, '');
+  if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
+
+  const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+  const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const ext = mimeType.includes('png') ? 'png' : 'jpg';
+  const filename = `Bukti-${t.ticket_no || t.id}.${ext}`;
+  const nativePlugin = window.Capacitor?.Plugins?.EtiketNative;
+
+  if (nativePlugin && typeof nativePlugin.shareToWhatsApp === 'function') {
+    const shareRes = await nativePlugin.shareToWhatsApp({
+      phone: cleanPhone,
+      message,
+      imageBase64: imgDataUrl,
+      mimeType,
+      filename
+    });
+    if (shareRes && shareRes.ok) {
+      await recordTicketWaSent(t.id, 'done_photo', message);
+      return;
+    }
+  }
+
+  // APK v1.4 native share fallback via exportBase64File (sudah tersedia di APK v1.4!) + clipboard
+  if (nativePlugin && typeof nativePlugin.exportBase64File === 'function') {
+    const base64Only = imgDataUrl.includes(',') ? imgDataUrl.split(',')[1] : imgDataUrl;
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: 'Teks penjelasan disalin! Pilih WhatsApp lalu Tempel (Paste) keterangan.',
+      showConfirmButton: false,
+      timer: 4000
+    });
+    await nativePlugin.exportBase64File({ filename, mimeType, base64: base64Only });
+    await recordTicketWaSent(t.id, 'done_photo', message);
+    return;
+  }
+
+  // Browser Web Share API (HP modern)
+  try {
+    const blob = await (await fetch(imgDataUrl)).blob();
+    const file = new File([blob], filename, { type: mimeType });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text: message, title: `Bukti ${t.ticket_no}` });
+      await recordTicketWaSent(t.id, 'done_photo', message);
+      return;
+    }
+  } catch (shareErr) {
+    if (shareErr && shareErr.name === 'AbortError') return;
+  }
+
+  // Fallback desktop browser: download foto & buka wa.me dengan penjelasan lengkap + link foto
+  if (typeof window.downloadQrPng === 'function') {
+    await window.downloadQrPng(imgDataUrl, filename).catch(() => {});
+  }
+  if (cleanPhone) {
+    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
+  }
+  await recordTicketWaSent(t.id, 'done_photo', message);
+}
+
 async function sendDirectWaByTicketId(ticketId, type) {
   const t = (allTickets || []).find(item => item.id === ticketId) || selectedTicketForModal;
   if (!t) return;
@@ -3366,7 +3615,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.5');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.6');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
