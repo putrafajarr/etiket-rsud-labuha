@@ -61,10 +61,17 @@ io.on('connection', (socket) => {
   });
 });
 
+const { runDailyAutoBackup } = require('./services/backupService');
 const PORT = process.env.PORT || 3000;
 
 // Initialize DB and start server
 initDb().then(() => {
+  runDailyAutoBackup().catch((err) => console.warn('[Backup] Startup auto-backup gagal:', err.message));
+  const dailyBackupTimer = setInterval(() => {
+    runDailyAutoBackup().catch((err) => console.warn('[Backup] Interval auto-backup gagal:', err.message));
+  }, 24 * 60 * 60 * 1000);
+  if (typeof dailyBackupTimer.unref === 'function') dailyBackupTimer.unref();
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log('========================================================');
     console.log(`🏥 SIM-ETIKET IT RSUD LABUHA BERJALAN`);

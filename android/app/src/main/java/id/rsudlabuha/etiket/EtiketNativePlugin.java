@@ -5,7 +5,9 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import androidx.core.content.pm.PackageInfoCompat;
 import android.net.Uri;
 import android.os.Build;
 import android.print.PrintAttributes;
@@ -381,6 +383,47 @@ public class EtiketNativePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Gagal membagikan gambar ke WhatsApp: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void getAppInfo(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            PackageManager pm = getContext().getPackageManager();
+            PackageInfo pInfo = pm.getPackageInfo(getContext().getPackageName(), 0);
+            long versionCode = PackageInfoCompat.getLongVersionCode(pInfo);
+            ret.put("packageName", getContext().getPackageName());
+            ret.put("versionName", pInfo.versionName != null ? pInfo.versionName : "1.5");
+            ret.put("versionCode", versionCode);
+            ret.put("hasWhatsAppPhotoShare", true);
+        } catch (Exception e) {
+            ret.put("packageName", getContext().getPackageName());
+            ret.put("versionName", "1.5");
+            ret.put("versionCode", 6);
+            ret.put("hasWhatsAppPhotoShare", true);
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openApkUpdateUrl(PluginCall call) {
+        String url = call.getString("url", MainActivity.DEFAULT_CLOUD_WEB_URL + "/downloads/ETIKET-RSUD-LABUHA.apk");
+        if (url == null || url.trim().isEmpty()) {
+            call.reject("URL APK kosong");
+            return;
+        }
+        getActivity().runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                getActivity().startActivity(intent);
+                JSObject ret = new JSObject();
+                ret.put("ok", true);
+                call.resolve(ret);
+            } catch (Exception e) {
+                call.reject("Gagal membuka tautan APK: " + e.getMessage());
+            }
+        });
     }
 
     private void startOrStopMonitorService(boolean enable) {

@@ -20,9 +20,10 @@ local.properties
 # SQLite Database (uncomment if you want fresh DB in production)
 # server/etiket.db
 
-# Uploaded complaint attachments
+# Uploaded complaint attachments & local backups
 server/uploads/*
 !server/uploads/.gitkeep
+server/backups/*
 
 # Local Binaries
 bin/

@@ -6,6 +6,7 @@ const { query } = require('../config/db');
 const WhatsAppService = require('../services/whatsapp');
 const TelegramService = require('../services/telegram');
 const EmailService = require('../services/email');
+const { createDatabaseBackupBundle } = require('../services/backupService');
 
 // GET all settings
 router.get('/', async (req, res) => {
@@ -134,6 +135,23 @@ router.get('/logs', async (req, res) => {
     res.json(logs);
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat log notifikasi' });
+  }
+});
+
+// GET full database backup JSON
+router.get('/backup', async (req, res) => {
+  try {
+    const recordTimestamp = req.query.record !== '0';
+    const bundle = await createDatabaseBackupBundle({
+      recordTimestamp,
+      source: 'express-api-download'
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Backup-ETiket-RSUD-Labuha-${stamp}.json"`);
+    res.send(JSON.stringify(bundle, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal membuat backup database: ' + err.message });
   }
 });
 

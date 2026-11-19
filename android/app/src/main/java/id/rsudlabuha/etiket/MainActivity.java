@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
@@ -102,6 +103,13 @@ public class MainActivity extends BridgeActivity {
                         webView.clearCache(true);
                         pendingCacheClearOnLoad = false;
                     }
+                    webView.setDownloadListener((dlUrl, userAgent, contentDisposition, mimetype, contentLength) -> {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(dlUrl));
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                        } catch (Exception ignored) {}
+                    });
                 }
             }
 

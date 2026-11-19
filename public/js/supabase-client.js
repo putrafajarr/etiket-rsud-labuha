@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.6');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.7');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.6').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.7').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -1095,6 +1095,76 @@
     return jsonResponse(rows || [], 200);
   }
 
+  async function handleGetBackup(queryString) {
+    const params = new URLSearchParams(queryString || '');
+    const recordTimestamp = params.get('record') !== '0';
+    const generatedAt = new Date().toISOString();
+
+    const [
+      tickets,
+      ticketLogs,
+      rooms,
+      categories,
+      users,
+      notificationsLog,
+      systemSettings
+    ] = await Promise.all([
+      supabaseRequest('/tickets?select=*&order=id.asc'),
+      supabaseRequest('/ticket_logs?select=*&order=id.asc'),
+      supabaseRequest('/rooms?select=*&order=id.asc'),
+      supabaseRequest('/categories?select=*&order=id.asc'),
+      supabaseRequest('/users?select=id,username,name,role,phone,email,specialization,is_active,created_at&order=id.asc'),
+      supabaseRequest('/notifications_log?select=*&order=id.desc&limit=1000'),
+      supabaseRequest('/system_settings?select=*&order=key.asc')
+    ]);
+
+    if (recordTimestamp) {
+      try {
+        await supabaseRequest('/system_settings?on_conflict=key', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+          body: [{ key: 'last_backup_at', value: generatedAt, updated_at: generatedAt }]
+        });
+      } catch (err) {
+        console.warn('[Backup] Gagal mencatat last_backup_at di Supabase:', err.message);
+      }
+    }
+
+    const safeTickets = Array.isArray(tickets) ? tickets : [];
+    const safeLogs = Array.isArray(ticketLogs) ? ticketLogs : [];
+    const safeRooms = Array.isArray(rooms) ? rooms : [];
+    const safeCategories = Array.isArray(categories) ? categories : [];
+    const safeUsers = Array.isArray(users) ? users : [];
+    const safeNotifLogs = Array.isArray(notificationsLog) ? notificationsLog : [];
+    const safeSettings = Array.isArray(systemSettings) ? systemSettings : [];
+
+    return jsonResponse({
+      backupVersion: '4.7',
+      appName: 'SIM-ETIKET IT RSUD LABUHA',
+      source: 'cloud-supabase-download',
+      generatedAt,
+      storageEngine: 'Supabase PostgreSQL Cloud',
+      counts: {
+        tickets: safeTickets.length,
+        ticket_logs: safeLogs.length,
+        rooms: safeRooms.length,
+        categories: safeCategories.length,
+        users: safeUsers.length,
+        notifications_log: safeNotifLogs.length,
+        system_settings: safeSettings.length
+      },
+      tables: {
+        tickets: safeTickets,
+        ticket_logs: safeLogs,
+        rooms: safeRooms,
+        categories: safeCategories,
+        users: safeUsers,
+        notifications_log: safeNotifLogs,
+        system_settings: safeSettings
+      }
+    }, 200);
+  }
+
   async function handleTestGateway(type, options) {
     const { fields } = await parseRequestBody(options);
     const settings = await fetchSettingsMap().catch(() => ({}));
@@ -1282,6 +1352,9 @@
       // Settings & Notification Logs
       if (method === 'GET' && pathname === '/api/settings/logs') {
         return await handleGetNotificationLogs();
+      }
+      if (method === 'GET' && pathname === '/api/settings/backup') {
+        return await handleGetBackup(queryString);
       }
       if (method === 'GET' && pathname === '/api/settings') {
         return await handleGetSettings();

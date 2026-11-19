@@ -1,6 +1,12 @@
 {
-  "version": "4.6",
-  "releasedAt": "2026-11-19T11:30:00+09:00",
-  "notes": "Pembaruan otomatis di dalam aplikasi (seperti game), kirim file foto bukti + salin teks otomatis di APK v1.4, Usulan Perbaikan, Wajib WA, serta Laporan PDF/Excel lengkap.",
-  "minApkVersion": "1.4"
+  "version": "4.7",
+  "releasedAt": "2026-11-19T12:00:00+09:00",
+  "notes": "Pembaruan wajib APK v1.5 (kirim gambar + teks + nomor WA langsung dalam 1 intent tanpa Paste) serta fitur Backup Database & Keamanan Data otomatis/1-klik.",
+  "minApkVersion": "1.5",
+  "apkVersion": "1.5",
+  "apkVersionCode": 6,
+  "forceApkUpdate": true,
+  "apkUrl": "https://raw.githubusercontent.com/putrafajarr/etiket-rsud-labuha/main/public/downloads/ETIKET-RSUD-LABUHA.apk",
+  "apkFallbackUrl": "https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev/downloads/ETIKET-RSUD-LABUHA.apk",
+  "apkNotes": "APK v1.5 wajib di-update oleh seluruh petugas IT agar foto bukti pengerjaan + penjelasan lengkap + nomor pelapor langsung terbuka otomatis ke WhatsApp tanpa perlu Paste manual."
 }

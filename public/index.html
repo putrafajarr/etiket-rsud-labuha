@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.6">
+  <link rel="stylesheet" href="/css/custom.css?v=4.7">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -108,6 +108,23 @@
   </header>
 
   <!-- In-App Game-Style Update Banner (muncul otomatis jika ada versi terbaru) -->
+  <!-- Mandatory APK Update Banner (Android v1.4 -> v1.5) -->
+  <div id="apkForceUpdateBanner" class="hidden bg-gradient-to-r from-rose-700 via-red-600 to-amber-600 text-white px-3 sm:px-6 py-2.5 shadow-md z-30 border-b border-rose-800/40">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex items-center space-x-2 min-w-0 flex-1">
+        <span class="text-base animate-pulse">📲</span>
+        <div class="min-w-0">
+          <span id="apkForceBannerText" class="font-bold">Pembaruan Wajib APK v1.5 Tersedia!</span>
+          <span id="apkForceBannerNotes" class="text-rose-100 block sm:inline sm:ml-1.5 text-[11px] truncate">Wajib update agar foto bukti + keterangan + nomor WA langsung terbuka otomatis.</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button type="button" onclick="triggerApkUpdateDownload(false)" class="px-3 py-1.5 bg-white text-rose-700 hover:bg-rose-50 font-extrabold rounded-lg shadow transition">⬇️ Update APK Sekarang</button>
+        <button type="button" onclick="triggerApkUpdateDownload(true)" class="px-2.5 py-1.5 bg-rose-900/50 hover:bg-rose-900/80 text-white font-bold rounded-lg border border-white/25 transition">Link Alternatif</button>
+      </div>
+    </div>
+  </div>
+
   <div id="appUpdateBanner" class="hidden bg-gradient-to-r from-sky-700 via-sky-600 to-teal-600 text-white px-3 sm:px-6 py-2.5 shadow-md z-20">
     <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs">
       <div class="flex items-center space-x-2 min-w-0">
@@ -198,7 +215,7 @@
       <div class="pt-3 mt-2 border-t border-slate-100 space-y-1">
         <button onclick="checkForWebAppUpdate(true); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sky-700 hover:bg-sky-50 transition text-left font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4 text-sky-600"></i>
-          <span>Cek Update Aplikasi (v4.6)</span>
+          <span>Cek Update Aplikasi (v4.7)</span>
         </button>
         <button onclick="testMobileHomeNotification(); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition text-left">
           <i data-lucide="bell-ring" class="w-4 h-4 text-sky-600"></i>
@@ -833,12 +850,54 @@
               </button>
               <button type="button" onclick="checkForWebAppUpdate(true)" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center space-x-1.5">
                 <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                <span>Cek Update Aplikasi (v4.6)</span>
+                <span>Cek Update Aplikasi (v4.7)</span>
               </button>
             </div>
             <p class="text-[10px] text-amber-900/80">
               💡 <b>Tips HP Xiaomi / Oppo / Vivo / Samsung:</b> Jika notifikasi belum muncul di atas layar, klik <b>Buka Izin Notif HP</b> di atas lalu aktifkan <i>Notifikasi Mengambang (Floating/Heads-up)</i> &amp; <i>Tampilkan di Layar Kunci</i>.
             </p>
+          </div>
+
+          <!-- Database Backup & Data Security -->
+          <div class="p-5 bg-indigo-50/60 rounded-2xl border border-indigo-200 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center space-x-2">
+                <span class="text-lg">💾</span>
+                <div>
+                  <h4 class="font-bold text-indigo-950 text-xs uppercase tracking-wider">Backup Database &amp; Keamanan Data</h4>
+                  <p class="text-[11px] text-indigo-900/75">Data utama tersimpan di <b>Cloud PostgreSQL Supabase</b>. Unduh salinan backup lengkap (.JSON / .XLSX) secara berkala atau aktifkan pengingat mingguan.</p>
+                </div>
+              </div>
+              <span id="backupLastAtBadge" class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">Belum Pernah Backup Manual</span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-white/80 rounded-xl p-3 border border-indigo-100">
+              <div>
+                <p class="font-bold text-slate-800">Lokasi Penyimpanan Data:</p>
+                <p class="text-slate-600 text-[11px] mt-0.5">Cloud Database Supabase (<code>kwjmzugilxbuqlrgangt.supabase.co</code>) + backup otomatis harian ke folder <code>server/backups/</code> jika Server Node/Express aktif.</p>
+              </div>
+              <div>
+                <p class="font-bold text-slate-800">Isi Paket Backup (.JSON):</p>
+                <p class="text-slate-600 text-[11px] mt-0.5">Tiket &amp; Riwayat Log, Ruangan, Kategori, Akun Petugas (tanpa hash password), Log Notifikasi, dan Pengaturan Sistem.</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div class="flex flex-wrap gap-2">
+                <button type="button" onclick="downloadDatabaseBackup()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center space-x-1.5">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                  <span>Unduh Backup Lengkap (.JSON)</span>
+                </button>
+                <button type="button" onclick="exportExcel()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center space-x-1.5">
+                  <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+                  <span>Export Laporan Excel (.XLSX)</span>
+                </button>
+              </div>
+              <label class="inline-flex items-center space-x-2 text-xs text-indigo-950 font-semibold cursor-pointer">
+                <input type="checkbox" id="cfg_auto_backup_reminder" checked class="w-4 h-4 text-indigo-600 rounded border-indigo-300 focus:ring-indigo-500">
+                <span>Pengingat Backup Mingguan (Koordinator IT)</span>
+              </label>
+            </div>
           </div>
 
           <!-- WhatsApp Gateway Settings -->
@@ -1439,11 +1498,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.6"></script>
-  <script src="/js/bcrypt.min.js?v=4.6"></script>
-  <script src="/js/supabase-client.js?v=4.6"></script>
-  <script src="/js/sound.js?v=4.6"></script>
-  <script src="/js/app.js?v=4.6"></script>
+  <script src="/js/qrcode.min.js?v=4.7"></script>
+  <script src="/js/bcrypt.min.js?v=4.7"></script>
+  <script src="/js/supabase-client.js?v=4.7"></script>
+  <script src="/js/sound.js?v=4.7"></script>
+  <script src="/js/app.js?v=4.7"></script>
 </body>
 </html>
 

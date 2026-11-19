@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.6';
+const APP_WEB_VERSION = '4.7';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -93,11 +93,11 @@ async function applyInAppWebUpdate(targetVersion) {
       allowOutsideClick: false,
       didOpen: () => Swal.showLoading()
     });
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     sessionStorage.removeItem('dismissed_web_ver');
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     if ('caches' in window) {
@@ -106,7 +106,7 @@ async function applyInAppWebUpdate(targetVersion) {
     }
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.update().catch(() => {})));
+      await Promise.all(regs.map(r => r.update().catch(() => { })));
     }
   } catch (e) {
     console.warn('Cache cleanup on OTA update:', e);
@@ -114,6 +114,139 @@ async function applyInAppWebUpdate(targetVersion) {
 
   const basePath = (window.location.pathname && window.location.pathname !== '/') ? window.location.pathname : '/index.html';
   window.location.replace(`${basePath}?app_v=${encodeURIComponent(ver)}&t=${Date.now()}`);
+}
+
+let apkMandatoryPromptedThisRun = false;
+
+function isRunningInsideApk() {
+  const cap = window.Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) return true;
+  return Boolean(cap.Plugins && cap.Plugins.EtiketNative);
+}
+
+async function getCurrentApkState() {
+  if (!isRunningInsideApk()) return { isApk: false };
+  const plugin = window.Capacitor?.Plugins?.EtiketNative;
+  if (plugin && typeof plugin.getAppInfo === 'function') {
+    try {
+      const info = await plugin.getAppInfo();
+      return {
+        isApk: true,
+        versionCode: Number(info?.versionCode || 0),
+        versionName: String(info?.versionName || ''),
+        hasWhatsAppPhotoShare: Boolean(info?.hasWhatsAppPhotoShare || typeof plugin.shareToWhatsApp === 'function')
+      };
+    } catch (err) {
+      console.warn('getAppInfo failed:', err);
+    }
+  }
+  const hasShare = Boolean(plugin && typeof plugin.shareToWhatsApp === 'function');
+  return {
+    isApk: true,
+    versionCode: hasShare ? 6 : 5,
+    versionName: hasShare ? '1.5' : '1.4',
+    hasWhatsAppPhotoShare: hasShare
+  };
+}
+
+function needsMandatoryApkUpdate(apkState, remoteInfo) {
+  if (!apkState || !apkState.isApk || !remoteInfo) return false;
+  if (!remoteInfo.forceApkUpdate) return false;
+  const targetCode = Number(remoteInfo.apkVersionCode || 0);
+  if (targetCode > 0 && apkState.versionCode > 0 && apkState.versionCode < targetCode) {
+    return true;
+  }
+  if (remoteInfo.minApkVersion && isNewerWebVersion(remoteInfo.minApkVersion, apkState.versionName || '1.0')) {
+    return true;
+  }
+  if (!apkState.hasWhatsAppPhotoShare) {
+    return true;
+  }
+  return false;
+}
+
+function showApkMandatoryBanner(info) {
+  const banner = document.getElementById('apkForceUpdateBanner');
+  const txt = document.getElementById('apkForceBannerText');
+  const notes = document.getElementById('apkForceBannerNotes');
+  if (!banner) return;
+  if (txt) {
+    txt.textContent = `Pembaruan Wajib APK v${info.apkVersion || info.minApkVersion || '1.5'} Tersedia!`;
+  }
+  if (notes) {
+    notes.textContent = info.apkNotes || info.notes || 'Wajib update APK di masing-masing HP tanpa hapus aplikasi lama.';
+  }
+  banner.classList.remove('hidden');
+}
+
+function hideApkMandatoryBanner() {
+  const banner = document.getElementById('apkForceUpdateBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
+async function triggerApkUpdateDownload(useFallback = false) {
+  const info = latestServerVersionInfo || {};
+  const primaryUrl = info.apkUrl || 'https://raw.githubusercontent.com/putrafajarr/etiket-rsud-labuha/main/public/downloads/ETIKET-RSUD-LABUHA.apk';
+  const rawFallback = info.apkFallbackUrl || '/downloads/ETIKET-RSUD-LABUHA.apk';
+  const chosenUrl = useFallback ? rawFallback : primaryUrl;
+  const absUrl = /^https?:\/\//i.test(chosenUrl)
+    ? chosenUrl
+    : new URL(chosenUrl, window.location.origin).href;
+
+  const plugin = window.Capacitor?.Plugins?.EtiketNative;
+  if (plugin && typeof plugin.openApkUpdateUrl === 'function') {
+    try {
+      await plugin.openApkUpdateUrl({ url: absUrl });
+      return true;
+    } catch (err) {
+      console.warn('openApkUpdateUrl fallback:', err);
+    }
+  }
+
+  const a = document.createElement('a');
+  a.href = absUrl;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  return true;
+}
+
+async function promptMandatoryApkUpdate(info, apkState) {
+  const targetVer = esc(info.apkVersion || info.minApkVersion || '1.5');
+  const currentVer = esc(apkState?.versionName || '1.4');
+  const noteText = esc(info.apkNotes || info.notes || 'Pembaruan ini menambahkan kirim foto bukti + keterangan lengkap + nomor WA otomatis dalam 1 klik.');
+
+  const ans = await Swal.fire({
+    icon: 'warning',
+    title: `📲 Wajib Update APK ke v${targetVer}`,
+    html: `
+      <div class="text-left text-xs space-y-2.5">
+        <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900">
+          APK yang terpasang di HP Anda masih <b>v${currentVer}</b>. Tersedia pembaruan wajib <b>APK v${targetVer}</b>.
+        </div>
+        <p class="text-slate-700 leading-relaxed">${noteText}</p>
+        <p class="text-emerald-700 font-semibold leading-relaxed">
+          ✓ Tidak perlu hapus aplikasi lama — cukup tekan tombol <b>Update Sekarang</b>, tunggu unduhan selesai, lalu ketuk <b>Update / Instal</b> agar langsung menimpa versi lama (login &amp; data aman).
+        </p>
+      </div>
+    `,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showCancelButton: false,
+    showDenyButton: true,
+    confirmButtonText: `⬇️ Update APK ke v${targetVer}`,
+    denyButtonText: '🔗 Link Alternatif',
+    confirmButtonColor: '#e11d48',
+    denyButtonColor: '#475569'
+  });
+
+  if (ans.isConfirmed) {
+    await triggerApkUpdateDownload(false);
+  } else if (ans.isDenied) {
+    await triggerApkUpdateDownload(true);
+  }
 }
 
 async function checkForWebAppUpdate(manual = false) {
@@ -126,14 +259,30 @@ async function checkForWebAppUpdate(manual = false) {
     if (!info || !info.version) return;
 
     latestServerVersionInfo = info;
+    const apkState = await getCurrentApkState();
+    const ticketModalOpen = !document.getElementById('ticketModal')?.classList.contains('hidden');
+    const loginOverlayOpen = !document.getElementById('loginOverlay')?.classList.contains('hidden');
+    const swalVisible = typeof Swal !== 'undefined' && Swal.isVisible();
+    const isToastOnly = Boolean(document.querySelector('.swal2-container.swal2-toast-shown'));
+    const swalModalVisible = swalVisible && !isToastOnly;
+
+    if (needsMandatoryApkUpdate(apkState, info)) {
+      showApkMandatoryBanner(info);
+      if (manual || (!apkMandatoryPromptedThisRun && !ticketModalOpen && !swalModalVisible)) {
+        apkMandatoryPromptedThisRun = true;
+        await promptMandatoryApkUpdate(info, apkState);
+      }
+      return;
+    } else {
+      hideApkMandatoryBanner();
+    }
+
     if (isNewerWebVersion(info.version, APP_WEB_VERSION)) {
       showInAppUpdateBanner(info);
 
       let dismissed = '';
-      try { dismissed = sessionStorage.getItem('dismissed_web_ver') || ''; } catch (e) {}
-      const ticketModalOpen = !document.getElementById('ticketModal')?.classList.contains('hidden');
-      const loginOverlayOpen = !document.getElementById('loginOverlay')?.classList.contains('hidden');
-      const hasBlockingDialog = (typeof Swal !== 'undefined' && Swal.isVisible()) || ticketModalOpen || loginOverlayOpen;
+      try { dismissed = sessionStorage.getItem('dismissed_web_ver') || ''; } catch (e) { }
+      const hasBlockingDialog = swalModalVisible || ticketModalOpen || loginOverlayOpen;
 
       if (manual || (dismissed !== info.version && !hasBlockingDialog)) {
         const ans = await Swal.fire({
@@ -153,15 +302,17 @@ async function checkForWebAppUpdate(manual = false) {
         if (ans.isConfirmed) {
           await applyInAppWebUpdate(info.version);
         } else {
-          try { sessionStorage.setItem('dismissed_web_ver', info.version); } catch (e) {}
+          try { sessionStorage.setItem('dismissed_web_ver', info.version); } catch (e) { }
         }
       }
     } else if (manual) {
       Swal.fire({
         icon: 'success',
         title: 'Aplikasi Sudah Versi Terbaru',
-        text: `Anda sedang menggunakan SIM-ETIKET versi terbaru (v${APP_WEB_VERSION}).`,
-        timer: 2200,
+        text: apkState.isApk
+          ? `Anda sedang menggunakan APK v${apkState.versionName || '1.5'} & Web v${APP_WEB_VERSION} (versi terbaru).`
+          : `Anda sedang menggunakan SIM-ETIKET versi terbaru (v${APP_WEB_VERSION}).`,
+        timer: 2400,
         showConfirmButton: false
       });
     }
@@ -187,7 +338,7 @@ function startInAppUpdateWatcher() {
         if (state && state.isActive) checkForWebAppUpdate(false);
       });
     }
-  } catch (e) {}
+  } catch (e) { }
   setInterval(() => checkForWebAppUpdate(false), 90000);
 }
 
@@ -321,7 +472,7 @@ async function checkAuthSession() {
         setAuthenticatedUser(u);
         if (overlay) overlay.classList.add('hidden');
         return true;
-      } catch (err) {}
+      } catch (err) { }
     }
     localStorage.removeItem('etiket_token');
     if (overlay) overlay.classList.remove('hidden');
@@ -334,7 +485,7 @@ function setAuthenticatedUser(user) {
   if (user) {
     try {
       localStorage.setItem('etiket_cached_user', JSON.stringify(user));
-    } catch (e) {}
+    } catch (e) { }
   }
   const navName = document.getElementById('navUserName');
   const navRole = document.getElementById('navUserRole');
@@ -445,7 +596,7 @@ function logoutUser() {
 async function initSocket() {
   try {
     if (typeof io !== 'function' && window.isLocalBackendHost && window.isLocalBackendHost() && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/socket.io/socket.io.js').catch(() => {});
+      await window.ensureScriptLoaded('/socket.io/socket.io.js').catch(() => { });
     }
     if (typeof io === 'function') {
       socket = io();
@@ -557,7 +708,7 @@ async function runRealtimeSyncCycle() {
     if (res && res.ok) {
       const freshTickets = await res.json();
       if (Array.isArray(freshTickets)) {
-        const currentSig = freshTickets.map(t => 
+        const currentSig = freshTickets.map(t =>
           `${t.id}:${t.status}:${t.assigned_to || ''}:${t.assigned_to_name || ''}:${t.priority}:${t.updated_at || ''}:${t.title || ''}`
         ).join('|');
 
@@ -2730,7 +2881,7 @@ function getTicketPublicTrackingUrl(ticketNo) {
   if (configured && /^https?:\/\//i.test(configured) && !configured.includes('localhost') && !configured.includes('127.0.0.1')) {
     try {
       baseOrigin = new URL(configured).origin;
-    } catch (e) {}
+    } catch (e) { }
   }
   if (!baseOrigin && typeof window !== 'undefined' && window.location && /^https?:$/i.test(window.location.protocol)) {
     const host = window.location.hostname || '';
@@ -2792,7 +2943,7 @@ async function fileToImageDataUrl(file) {
   if (typeof window.compressImageFile === 'function') {
     try {
       return await window.compressImageFile(file, { maxDim: 1024, quality: 0.72, maxLength: 700000 });
-    } catch (e) {}
+    } catch (e) { }
   }
   return new Promise((resolve) => {
     const fr = new FileReader();
@@ -2980,7 +3131,7 @@ async function copyTextSafe(text) {
       await navigator.clipboard.writeText(text);
       return true;
     }
-  } catch (e) {}
+  } catch (e) { }
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
@@ -3079,7 +3230,7 @@ async function sendWaPhotoDirect() {
 
   // Fallback desktop browser: download foto & buka wa.me dengan penjelasan lengkap + link foto
   if (typeof window.downloadQrPng === 'function') {
-    await window.downloadQrPng(imgDataUrl, filename).catch(() => {});
+    await window.downloadQrPng(imgDataUrl, filename).catch(() => { });
   }
   if (cleanPhone) {
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -3615,7 +3766,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.6');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.7');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
@@ -3976,6 +4127,125 @@ async function saveSignersFromGateway() {
   }
 }
 
+function updateBackupStatusUi() {
+  const badge = document.getElementById('backupLastAtBadge');
+  if (!badge) return;
+  const lastIso = (appSettings?.last_backup_at || '').trim();
+  if (!lastIso) {
+    badge.textContent = 'Belum Pernah Backup Manual';
+    badge.className = 'text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+    return;
+  }
+  const formatted = typeof window.formatDateTimeId === 'function'
+    ? window.formatDateTimeId(lastIso)
+    : new Date(lastIso).toLocaleString('id-ID');
+  badge.textContent = `Backup Terakhir: ${formatted}`;
+  badge.className = 'text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+}
+
+function maybeShowWeeklyBackupReminder() {
+  try {
+    if (sessionStorage.getItem('etiket_backup_reminded') === '1') return;
+    if (appSettings?.auto_backup_reminder === '0') return;
+    const apkBanner = document.getElementById('apkForceUpdateBanner');
+    if (apkBanner && !apkBanner.classList.contains('hidden')) return;
+    let user = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
+    if (!user) {
+      try { user = JSON.parse(localStorage.getItem('etiket_cached_user') || 'null'); } catch (e) {}
+    }
+    const isCoord = user && (user.role === 'koordinator' || user.role === 'kepala_it' || user.role === 'superadmin');
+    if (!isCoord) return;
+
+    const lastIso = (appSettings?.last_backup_at || '').trim();
+    const lastMs = lastIso ? new Date(lastIso).getTime() : 0;
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (!lastMs || Number.isNaN(lastMs) || (Date.now() - lastMs) > sevenDaysMs) {
+      sessionStorage.setItem('etiket_backup_reminded', '1');
+      if (typeof Swal !== 'undefined' && !Swal.isVisible()) {
+        Swal.fire({
+          toast: true,
+          position: 'bottom-end',
+          icon: 'info',
+          title: 'Pengingat Backup Mingguan',
+          text: 'Silakan unduh backup JSON terbaru di menu Pengaturan Server -> Backup Database.',
+          showConfirmButton: false,
+          timer: 6500,
+          timerProgressBar: true
+        });
+      }
+    }
+  } catch (e) {}
+}
+
+async function downloadDatabaseBackup() {
+  Swal.fire({
+    title: 'Menyiapkan File Backup...',
+    text: 'Mengumpulkan seluruh data tiket, log, ruangan, petugas, dan pengaturan.',
+    allowOutsideClick: false,
+    didOpen: () => Swal.showLoading()
+  });
+
+  try {
+    const res = await fetch('/api/settings/backup');
+    if (!res.ok) throw new Error('Gagal mengunduh backup dari server');
+    const bundle = await res.json();
+    const jsonStr = JSON.stringify(bundle, null, 2);
+    const dateStamp = new Date().toISOString().slice(0, 10);
+    const filename = `Backup-ETiket-RSUD-Labuha-${dateStamp}.json`;
+
+    const cap = window.Capacitor;
+    if (cap?.Plugins?.EtiketNative && typeof cap.Plugins.EtiketNative.exportBase64File === 'function') {
+      const bytes = new TextEncoder().encode(jsonStr);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      await cap.Plugins.EtiketNative.exportBase64File({
+        filename,
+        mimeType: 'application/json',
+        base64: btoa(binary)
+      });
+    } else {
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+    }
+
+    appSettings = Object.assign({}, appSettings || {}, {
+      last_backup_at: bundle.generatedAt || new Date().toISOString()
+    });
+    updateBackupStatusUi();
+
+    const counts = bundle.counts || {};
+    Swal.fire({
+      icon: 'success',
+      title: 'Backup Database Berhasil Diunduh!',
+      html: `
+        <div class="text-left text-xs space-y-1.5">
+          <p>File <b>${esc(filename)}</b> siap disimpan di perangkat Anda.</p>
+          <ul class="list-disc pl-4 text-slate-600 space-y-0.5">
+            <li>Tiket Pengaduan: <b>${counts.tickets ?? 0}</b> data</li>
+            <li>Riwayat Log Tiket: <b>${counts.ticket_logs ?? 0}</b> data</li>
+            <li>Master Ruangan: <b>${counts.rooms ?? 0}</b> unit</li>
+            <li>Akun Petugas: <b>${counts.users ?? 0}</b> akun</li>
+            <li>Log Notifikasi &amp; Pengaturan: <b>${(counts.notifications_log ?? 0) + (counts.system_settings ?? 0)}</b> entri</li>
+          </ul>
+        </div>
+      `,
+      confirmButtonColor: '#4f46e5'
+    });
+  } catch (err) {
+    Swal.fire('Gagal Backup', err.message || 'Terjadi kesalahan saat menyiapkan backup.', 'error');
+  }
+}
+
 // Load Gateway & Server Settings
 async function loadGatewaySettings() {
   try {
@@ -3994,6 +4264,12 @@ async function loadGatewaySettings() {
     }
 
     updateSignersPreview();
+    updateBackupStatusUi();
+    const autoBackupCheckbox = document.getElementById('cfg_auto_backup_reminder');
+    if (autoBackupCheckbox) {
+      autoBackupCheckbox.checked = cfg.auto_backup_reminder !== '0';
+    }
+    maybeShowWeeklyBackupReminder();
 
     document.getElementById('cfg_wa_enabled').checked = cfg.wa_gateway_enabled === '1';
     document.getElementById('cfg_wa_provider').value = cfg.wa_gateway_provider || 'fonnte';
@@ -4026,8 +4302,10 @@ function setQuickServerIp() {
 async function saveGatewaySettings() {
   const serverUrlInput = document.getElementById('cfg_app_server_url');
   const signers = getReportSigners();
+  const autoBackupCheckbox = document.getElementById('cfg_auto_backup_reminder');
   const payload = {
     app_server_url: serverUrlInput ? serverUrlInput.value.trim() : '',
+    auto_backup_reminder: autoBackupCheckbox && !autoBackupCheckbox.checked ? '0' : '1',
     director_name: (document.getElementById('cfg_director_name')?.value || '').trim() || signers.directorName,
     director_nip: document.getElementById('cfg_director_nip') ? document.getElementById('cfg_director_nip').value.trim() : signers.directorNip,
     head_simrs_name: (document.getElementById('cfg_head_simrs_name')?.value || '').trim() || signers.headName,
@@ -4058,11 +4336,12 @@ async function saveGatewaySettings() {
     if (!res.ok) throw new Error('Gagal menyimpan pengaturan');
     appSettings = Object.assign({}, appSettings || {}, payload);
     updateSignersPreview();
+    updateBackupStatusUi();
 
     Swal.fire({
       icon: 'success',
       title: 'Pengaturan Berhasil Disimpan!',
-      text: 'Alamat server aplikasi (APK), konfigurasi gateway, dan barcode QR telah diperbarui.',
+      text: 'Alamat server aplikasi (APK), konfigurasi gateway, backup, dan barcode QR telah diperbarui.',
       timer: 2000,
       showConfirmButton: false
     });
