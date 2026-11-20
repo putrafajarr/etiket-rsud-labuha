@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.7');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.8');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.7').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.8').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -625,11 +625,14 @@
 
     const tech = userRows[0];
     const nowIso = new Date().toISOString();
+    const nextStatus = (ticket.status === 'in_progress' || ticket.status === 'pending')
+      ? ticket.status
+      : 'assigned';
     const patchData = {
       assigned_to: tech.id,
       assigned_to_name: tech.name,
       assigned_at: nowIso,
-      status: 'in_progress',
+      status: nextStatus,
       actual_response_time: ticket.actual_response_time || nowIso,
       updated_at: nowIso
     };
@@ -644,8 +647,8 @@
     await insertTicketLog(
       ticketId,
       assignedByName,
-      'DISPOSISI TEKNISI',
-      `Tiket ditugaskan kepada ${tech.name} oleh ${assignedByName}`
+      'PENUGASAN TEKNISI',
+      `Tiket diambil / ditugaskan kepada ${tech.name} oleh ${assignedByName}`
     );
 
     return jsonResponse({ success: true, message: 'Teknisi berhasil ditugaskan', ticket: updatedTicket }, 200);
@@ -739,7 +742,7 @@
       patchData.improvement_suggestion = improvementSuggestion;
     }
 
-    if (status === 'in_progress') {
+    if (status === 'assigned' || status === 'in_progress') {
       patchData.actual_response_time = currentTicket.actual_response_time || nowIso;
       if (notes) patchData.resolution_notes = notes;
     } else if (status === 'pending') {
@@ -768,10 +771,11 @@
 
     const isDraft = fields.is_draft === '1' || fields.is_draft === true;
     if (!isDraft) {
+      const actionLabel = (fields.action_label || '').trim();
       await insertTicketLog(
         ticketId,
         userName,
-        `STATUS DIUBAH: ${status.toUpperCase()}`,
+        actionLabel || `STATUS DIUBAH: ${status.toUpperCase()}`,
         notes || pendingReason || `Status tiket diperbarui menjadi ${status}`
       );
     }

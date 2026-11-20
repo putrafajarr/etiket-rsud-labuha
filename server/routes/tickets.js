@@ -257,21 +257,21 @@ router.patch('/:id/assign', async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    const actionDesc = currentTicket.assigned_to 
-      ? `Tiket didisposisikan / dialihkan dari ${currentTicket.assigned_to_name || 'Petugas Sebelumnya'} ke ${tech.name}`
-      : `Tiket diambil / dikunci oleh teknisi: ${tech.name}`;
+    const nextStatus = (currentTicket.status === 'in_progress' || currentTicket.status === 'pending')
+      ? currentTicket.status
+      : 'assigned';
 
     await query.run(`
       UPDATE tickets 
-      SET assigned_to = ?, assigned_to_name = ?, assigned_at = ?, status = 'in_progress', updated_at = ?
+      SET assigned_to = ?, assigned_to_name = ?, assigned_at = ?, status = ?, actual_response_time = COALESCE(actual_response_time, ?), updated_at = ?
       WHERE id = ?
-    `, [tech.id, tech.name, now, now, id]);
+    `, [tech.id, tech.name, now, nextStatus, now, now, id]);
 
     // Log action
     await query.run(`
       INSERT INTO ticket_logs (ticket_id, user_name, action, notes)
       VALUES (?, ?, 'PENUGASAN TEKNISI', ?)
-    `, [id, assigned_by_name, `Tiket dialihkan ke teknisi: ${tech.name}`]);
+    `, [id, assigned_by_name, `Tiket diambil / ditugaskan kepada teknisi: ${tech.name}`]);
 
     const updatedTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);
     const io = req.app.get('io');
@@ -317,7 +317,7 @@ router.post('/:id/wa-log', async (req, res) => {
 router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, user_name = 'Teknisi IT', notes, pending_reason, improvement_suggestion, is_draft } = req.body;
+    const { status, user_name = 'Teknisi IT', notes, pending_reason, improvement_suggestion, is_draft, action_label } = req.body;
 
     if (!status) {
       return res.status(400).json({ error: 'Status baru wajib disertakan' });
@@ -369,7 +369,7 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
       params.push(pending_reason);
     }
 
-    if (status === 'in_progress' && !currentTicket.actual_response_time) {
+    if ((status === 'assigned' || status === 'in_progress') && !currentTicket.actual_response_time) {
       sql += ', actual_response_time = ?';
       params.push(now);
     }
@@ -394,10 +394,11 @@ router.patch('/:id/status', upload.single('proof_photo'), async (req, res) => {
 
     const isDraft = is_draft === '1' || is_draft === true || is_draft === 'true';
     if (!isDraft) {
+      const logAction = action_label ? String(action_label).trim() : `STATUS DIUBAH: ${status.toUpperCase()}`;
       await query.run(`
         INSERT INTO ticket_logs (ticket_id, user_name, action, notes)
         VALUES (?, ?, ?, ?)
-      `, [id, user_name, `STATUS DIUBAH: ${status.toUpperCase()}`, notes || pending_reason || `Status tiket diperbarui menjadi ${status}`]);
+      `, [id, user_name, logAction, notes || pending_reason || `Status tiket diperbarui menjadi ${status}`]);
     }
 
     const updatedTicket = await query.get('SELECT * FROM tickets WHERE id = ?', [id]);

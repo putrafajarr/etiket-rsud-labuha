@@ -183,7 +183,7 @@
     </div>
   </main>
 
-  <script src="/js/supabase-client.js?v=4.7"></script>
+  <script src="/js/supabase-client.js?v=4.8"></script>
   <script>
     let currentTicket = null;
     let selectedRating = 0;
@@ -241,8 +241,8 @@
       const statusTitle = document.getElementById('ticketStatusTitle');
       const colors = {
         open: { bg: 'bg-rose-600', text: 'TIKET TERBUKA (MENUNGGU)' },
-        assigned: { bg: 'bg-amber-600', text: 'DITUGASKAN KE TEKNISI' },
-        in_progress: { bg: 'bg-sky-600', text: 'SEDANG DALAM PENGERJAAN' },
+        assigned: { bg: 'bg-amber-600', text: 'DIAMBIL / DITUGASKAN KE IT' },
+        in_progress: { bg: 'bg-sky-600', text: 'SEDANG DIPROSES TIM IT' },
         pending: { bg: 'bg-purple-600', text: 'PENDING (SPAREPART/VENDOR)' },
         resolved: { bg: 'bg-emerald-600', text: 'SELESAI DIPERBAIKI' },
         closed: { bg: 'bg-slate-700', text: 'TIKET DITUTUP' }

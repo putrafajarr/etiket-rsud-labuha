@@ -1,7 +1,7 @@
 {
-  "version": "4.7",
-  "releasedAt": "2026-11-19T12:00:00+09:00",
-  "notes": "Pembaruan wajib APK v1.5 (kirim gambar + teks + nomor WA langsung dalam 1 intent tanpa Paste) serta fitur Backup Database & Keamanan Data otomatis/1-klik.",
+  "version": "4.8",
+  "releasedAt": "2026-11-20T09:40:00+09:00",
+  "notes": "Alur baru teknisi IT: Ambil Tiket Dulu -> OTW Lokasi (WA), Sedang Diproses (WA + ubah status otomatis), Selesai (WA + kunci otomatis), serta fitur Edit & Tambah Button Aksi.",
   "minApkVersion": "1.5",
   "apkVersion": "1.5",
   "apkVersionCode": 6,

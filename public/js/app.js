@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.7';
+const APP_WEB_VERSION = '4.8';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -263,12 +263,10 @@ async function checkForWebAppUpdate(manual = false) {
     const ticketModalOpen = !document.getElementById('ticketModal')?.classList.contains('hidden');
     const loginOverlayOpen = !document.getElementById('loginOverlay')?.classList.contains('hidden');
     const swalVisible = typeof Swal !== 'undefined' && Swal.isVisible();
-    const isToastOnly = Boolean(document.querySelector('.swal2-container.swal2-toast-shown'));
-    const swalModalVisible = swalVisible && !isToastOnly;
 
     if (needsMandatoryApkUpdate(apkState, info)) {
       showApkMandatoryBanner(info);
-      if (manual || (!apkMandatoryPromptedThisRun && !ticketModalOpen && !swalModalVisible)) {
+      if (manual || (!apkMandatoryPromptedThisRun && !ticketModalOpen && !swalVisible)) {
         apkMandatoryPromptedThisRun = true;
         await promptMandatoryApkUpdate(info, apkState);
       }
@@ -282,7 +280,7 @@ async function checkForWebAppUpdate(manual = false) {
 
       let dismissed = '';
       try { dismissed = sessionStorage.getItem('dismissed_web_ver') || ''; } catch (e) { }
-      const hasBlockingDialog = swalModalVisible || ticketModalOpen || loginOverlayOpen;
+      const hasBlockingDialog = swalVisible || ticketModalOpen || loginOverlayOpen;
 
       if (manual || (dismissed !== info.version && !hasBlockingDialog)) {
         const ans = await Swal.fire({
@@ -850,15 +848,25 @@ async function runRealtimeSyncCycle() {
                     timer: 4500,
                     timerProgressBar: true
                   });
-                } else if (ft.status === 'in_progress' && oldT.status === 'open') {
+                } else if (ft.status === 'in_progress' && (oldT.status === 'open' || oldT.status === 'assigned')) {
                   Swal.fire({
                     toast: true,
                     position: 'top-end',
                     icon: 'info',
-                    title: `⚙️ Sedang Dikerjakan: ${ft.room_name}`,
-                    text: `${ft.ticket_no} mulai dikerjakan (${ft.assigned_to_name || 'Tim IT'})`,
+                    title: `🔧 Sedang Diproses: ${ft.room_name}`,
+                    text: `${ft.ticket_no} sedang diproses oleh ${ft.assigned_to_name || 'Tim IT'}`,
                     showConfirmButton: false,
                     timer: 4000
+                  });
+                } else if (ft.status === 'assigned' && oldT.status === 'open') {
+                  Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    title: `👤 Diambil / Ditugaskan: ${ft.room_name}`,
+                    text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                    showConfirmButton: false,
+                    timer: 3800
                   });
                 } else {
                   Swal.fire({
@@ -1397,9 +1405,9 @@ function renderTickets() {
 
     const statusBadge = {
       open: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>Tiket Baru</span>',
-      assigned: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Ditugaskan</span>',
-      in_progress: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>Dikerjakan</span>',
-      pending: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Pending</span>',
+      assigned: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Diambil / Ditugaskan</span>',
+      in_progress: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>Sedang Diproses</span>',
+      pending: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 whitespace-nowrap"><span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>Pending</span>',
       resolved: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">✓ Selesai</span>',
       closed: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">✓ Ditutup</span>'
     }[t.status] || `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">${esc(t.status)}</span>`;
@@ -2295,7 +2303,7 @@ async function claimTicketSelf() {
     const resData = await res.json();
     if (!res.ok) throw new Error(resData.error || 'Gagal mengambil tiket');
 
-    closeModal();
+    const nextStatus = resData?.ticket?.status || 'assigned';
 
     // Bunyikan chime sukses
     if (window.soundAlert) window.soundAlert.playSuccess();
@@ -2305,8 +2313,8 @@ async function claimTicketSelf() {
       toast: true,
       position: 'top-end',
       icon: 'success',
-      title: `🔒 Tiket Berhasil Anda Kunci!`,
-      text: `${savedTicketNo} (${savedRoom}) terkunci atas nama Anda: ${activeUser.name}`,
+      title: `🔒 Tiket Berhasil Anda Ambil!`,
+      text: `${savedTicketNo} (${savedRoom}) terkunci atas nama ${activeUser.name}. Silakan pilih OTW / Sedang Diproses.`,
       showConfirmButton: false,
       timer: 4500,
       timerProgressBar: true
@@ -2320,7 +2328,7 @@ async function claimTicketSelf() {
         ticketId,
         ticketNo: savedTicketNo,
         roomName: savedRoom,
-        status: 'in_progress',
+        status: nextStatus,
         assignedTo: Number(activeUser.id) || 0,
         assignedToName: activeUser.name,
         eventType: 'assigned'
@@ -2330,6 +2338,7 @@ async function claimTicketSelf() {
     await loadTickets();
     await loadStats();
     if (currentTab === 'technician') loadTechnicianTickets();
+    await openTicketModal(ticketId);
   } catch (err) {
     Swal.fire('Error', err.message, 'error');
   }
@@ -2383,6 +2392,17 @@ async function openTicketModal(ticketId) {
     selectedTicketForModal = data.ticket;
     selectedTicketLogs = data.logs || [];
 
+    // Ensure custom IT action buttons are synchronized from settings
+    if (!appSettings || !Object.prototype.hasOwnProperty.call(appSettings, 'it_action_buttons')) {
+      try {
+        const sRes = await fetch('/api/settings');
+        const cfg = await sRes.json();
+        if (cfg && typeof cfg === 'object') {
+          appSettings = Object.assign({}, appSettings || {}, cfg);
+        }
+      } catch (e) { }
+    }
+
     // Strict Lock Permission Checks
     const isDone = selectedTicketForModal.status === 'resolved' || selectedTicketForModal.status === 'closed';
     const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
@@ -2397,12 +2417,16 @@ async function openTicketModal(ticketId) {
     const delegateLabel = document.getElementById('modalDelegateLabel');
     const lockBanner = document.getElementById('modalLockBanner');
     const lockText = document.getElementById('modalLockText');
+    const needClaimNotice = document.getElementById('modalNeedClaimNotice');
+    const waBox = document.getElementById('modalWaBox');
 
     if (isDone) {
       // Tiket telah selesai dikerjakan: KUNCI PERMANEN UNTUK SEMUA ORANG
       if (lockBanner) lockBanner.classList.add('hidden');
       if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
       if (claimBox) claimBox.classList.add('hidden');
+      if (needClaimNotice) needClaimNotice.classList.add('hidden');
+      if (waBox) waBox.classList.add('hidden');
       if (actionContainer) actionContainer.classList.add('hidden');
       if (resolvedBanner) resolvedBanner.classList.remove('hidden');
       if (resolvedSummary) {
@@ -2422,11 +2446,13 @@ async function openTicketModal(ticketId) {
       if (resolvedBanner) resolvedBanner.classList.add('hidden');
       if (resolvedSummary) resolvedSummary.classList.add('hidden');
       if (isUnassigned) {
-        // Tiket belum diambil siapapun
+        // Tiket belum diambil siapapun: IT wajib ambil/tugaskan dulu sebelum aksi WA & pengerjaan terbuka
         if (lockBanner) lockBanner.classList.add('hidden');
         if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
         if (actionContainer) actionContainer.classList.remove('hidden');
         if (claimBox) claimBox.classList.remove('hidden');
+        if (needClaimNotice) needClaimNotice.classList.remove('hidden');
+        if (waBox) waBox.classList.add('hidden');
         if (delegateLabel) delegateLabel.textContent = 'Atau Disposisikan ke Petugas Lain:';
       } else if (isAssignedToMe) {
         // Tiket sedang ditangani oleh user yang sedang login
@@ -2438,11 +2464,13 @@ async function openTicketModal(ticketId) {
             iconBox.className = 'w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm';
             iconBox.textContent = '👤';
           }
-          lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani. Silakan perbarui status atau disposisikan jika perlu bantuan.`;
+          lockText.innerHTML = `Tiket ini sedang <b>Anda</b> tangani. Pilih tombol aksi (<b>OTW Lokasi</b>, <b>Sedang Diproses</b>, atau <b>Selesai</b>) untuk mengirim WA &amp; memperbarui progres otomatis.`;
         }
         if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
         if (actionContainer) actionContainer.classList.remove('hidden');
         if (claimBox) claimBox.classList.add('hidden');
+        if (needClaimNotice) needClaimNotice.classList.add('hidden');
+        if (waBox) waBox.classList.remove('hidden');
         if (delegateLabel) delegateLabel.textContent = 'Oper / Disposisikan Tiket Ini ke Rekan IT Lain:';
       } else if (isCoordinator) {
         // Tiket sedang ditangani orang lain, tapi yang buka adalah KOORDINATOR IT
@@ -2459,10 +2487,14 @@ async function openTicketModal(ticketId) {
         if (readOnlyBanner) readOnlyBanner.classList.add('hidden');
         if (actionContainer) actionContainer.classList.remove('hidden');
         if (claimBox) claimBox.classList.add('hidden');
+        if (needClaimNotice) needClaimNotice.classList.add('hidden');
+        if (waBox) waBox.classList.remove('hidden');
         if (delegateLabel) delegateLabel.textContent = `Disposisikan Ulang / Alihkan dari ${selectedTicketForModal.assigned_to_name} ke:`;
       } else {
         // STRICT LOCK: Tiket sedang ditangani IT lain, dan user saat ini BUKAN Koordinator!
         if (lockBanner) lockBanner.classList.add('hidden');
+        if (needClaimNotice) needClaimNotice.classList.add('hidden');
+        if (waBox) waBox.classList.add('hidden');
         if (readOnlyBanner) {
           readOnlyBanner.classList.remove('hidden');
           const readOnlyName = document.getElementById('modalReadOnlyTechName');
@@ -2470,6 +2502,19 @@ async function openTicketModal(ticketId) {
         }
         if (actionContainer) actionContainer.classList.add('hidden');
       }
+    }
+
+    const headerStatusBadge = document.getElementById('modalCurrentStatusBadge');
+    if (headerStatusBadge) {
+      const statusTextMap = {
+        open: 'Tiket Baru (Belum Diambil)',
+        assigned: 'Diambil / Ditugaskan',
+        in_progress: 'Sedang Diproses',
+        pending: 'Pending',
+        resolved: 'Selesai Diperbaiki',
+        closed: 'Ditutup'
+      };
+      headerStatusBadge.textContent = statusTextMap[selectedTicketForModal.status] || String(selectedTicketForModal.status || '').toUpperCase();
     }
 
     document.getElementById('modalTicketNo').textContent = selectedTicketForModal.ticket_no;
@@ -2524,13 +2569,13 @@ async function openTicketModal(ticketId) {
     }
 
     document.getElementById('modalAssignTech').value = selectedTicketForModal.assigned_to || '';
-    document.getElementById('modalNewStatus').value = selectedTicketForModal.status || 'in_progress';
     document.getElementById('modalResolutionNotes').value = selectedTicketForModal.resolution_notes || '';
     const impInput = document.getElementById('modalImprovementSuggestion');
     if (impInput) impInput.value = selectedTicketForModal.improvement_suggestion || '';
     const proofFileInput = document.getElementById('modalProofPhoto');
     if (proofFileInput) proofFileInput.value = '';
 
+    renderActionButtonsInTicketModal();
     refreshModalWaStatusBadge();
     renderModalLogsList(selectedTicketLogs);
 
@@ -2661,7 +2706,10 @@ async function assignTechnician() {
     const resData = await res.json();
     if (!res.ok) throw new Error(resData.error || 'Gagal menugaskan teknisi');
 
-    closeModal();
+    const assignedSelf = Number(techId) === Number(activeUser?.id);
+    if (!assignedSelf) {
+      closeModal();
+    }
 
     if (window.soundAlert) window.soundAlert.playSuccess();
 
@@ -2670,7 +2718,7 @@ async function assignTechnician() {
       position: 'top-end',
       icon: 'success',
       title: `👨‍🔧 Teknisi Ditugaskan!`,
-      text: `${savedTicketNo} dialihkan ke ${targetTechName}`,
+      text: `${savedTicketNo} ditugaskan ke ${targetTechName}`,
       showConfirmButton: false,
       timer: 4500,
       timerProgressBar: true
@@ -2683,7 +2731,7 @@ async function assignTechnician() {
         ticketId,
         ticketNo: savedTicketNo,
         roomName: savedRoom,
-        status: 'in_progress',
+        status: resData?.ticket?.status || 'assigned',
         assignedTo: Number(techId) || 0,
         assignedToName: targetTechName,
         eventType: 'assigned'
@@ -2694,118 +2742,633 @@ async function assignTechnician() {
     await loadTechnicians();
     await loadStats();
     if (currentTab === 'technician') loadTechnicianTickets();
+    if (assignedSelf) {
+      await openTicketModal(ticketId);
+    }
   } catch (err) {
     Swal.fire('Error', err.message, 'error');
   }
 }
 
-// Update Ticket Status
-async function updateTicketStatus() {
-  if (!selectedTicketForModal) return;
+// =============================================================================
+// Configurable IT Action Buttons (OTW, Sedang Diproses, Selesai & Custom)
+// =============================================================================
 
-  const isDone = selectedTicketForModal.status === 'resolved' || selectedTicketForModal.status === 'closed';
+const ACTION_BTN_COLOR_MAP = {
+  sky: 'bg-sky-600 hover:bg-sky-700 text-white',
+  amber: 'bg-amber-500 hover:bg-amber-600 text-white',
+  indigo: 'bg-indigo-600 hover:bg-indigo-700 text-white',
+  purple: 'bg-purple-600 hover:bg-purple-700 text-white',
+  emerald: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+  rose: 'bg-rose-600 hover:bg-rose-700 text-white',
+  slate: 'bg-slate-800 hover:bg-black text-white'
+};
+
+const ACTION_BADGE_COLOR_MAP = {
+  sky: 'bg-sky-100 text-sky-800 border-sky-200',
+  amber: 'bg-amber-100 text-amber-800 border-amber-200',
+  indigo: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+  purple: 'bg-purple-100 text-purple-800 border-purple-200',
+  emerald: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  rose: 'bg-rose-100 text-rose-800 border-rose-200',
+  slate: 'bg-slate-200 text-slate-800 border-slate-300'
+};
+
+function getDefaultItActionButtons() {
+  return [
+    {
+      id: 'btn_otw',
+      key: 'otw',
+      label: 'OTW Lokasi',
+      emoji: '🚀',
+      color: 'sky',
+      targetStatus: '',
+      requireNotes: false,
+      attachPhoto: false,
+      template:
+        'Halo {pelapor},\n\nSaya *{teknisi}* dari Tim IT RSUD Labuha saat ini *SEDANG MENUJU KE {ruangan}* (Tiket: *{tiket}*).\n\n*Keluhan / Penjelasan:*\n{keluhan}\n\n*Catatan / Tindakan Awal:*\n{hasil}\n\n🔍 *Pantau Progres:* {link}\n\nMohon ditunggu, terima kasih.'
+    },
+    {
+      id: 'btn_proses',
+      key: 'in_progress',
+      label: 'Sedang Diproses',
+      emoji: '🔧',
+      color: 'amber',
+      targetStatus: 'in_progress',
+      requireNotes: false,
+      attachPhoto: false,
+      template:
+        'Halo {pelapor},\n\nLaporan kendala IT di *{ruangan}* (Tiket: *{tiket}*) saat ini *SEDANG DIPROSES / DIKERJAKAN* oleh *{teknisi}* (Tim IT RSUD Labuha).\n\n*Keluhan / Penjelasan:*\n{keluhan}\n\n*Tindakan Awal / Catatan:*\n{hasil}\n\n🔍 *Pantau Progres:* {link}\n\nAkan segera kami kabari kembali setelah selesai.'
+    },
+    {
+      id: 'btn_selesai',
+      key: 'done',
+      label: 'Selesai',
+      emoji: '✅',
+      color: 'emerald',
+      targetStatus: 'resolved',
+      requireNotes: true,
+      attachPhoto: true,
+      template:
+        'Halo {pelapor},\n\nLaporan kendala IT di *{ruangan}* (Tiket: *{tiket}*) telah ditangani oleh *{teknisi}* (Tim IT RSUD Labuha) dan dinyatakan *SELESAI DIPERBAIKI*.\n\n*Keluhan / Penjelasan Masalah:*\n{keluhan}\n\n*Hasil Pengerjaan / Tindak Lanjut:*\n{hasil}\n\n*Usulan Perbaikan:*\n{usulan}\n\n📸 *Lihat Foto Bukti & Beri Rating:*\n{link}\n\nSilakan dicek kembali fungsinya. Terima kasih atas kerja samanya.'
+    }
+  ];
+}
+
+function getConfiguredActionButtons() {
+  const raw = appSettings && appSettings.it_action_buttons;
+  if (raw) {
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((b, idx) => ({
+          id: String(b.id || `btn_custom_${idx}`),
+          key: String(b.key || b.id || `custom_${idx}`),
+          label: String(b.label || 'Aksi').trim(),
+          emoji: String(b.emoji || '💬').trim(),
+          color: ACTION_BTN_COLOR_MAP[b.color] ? b.color : 'sky',
+          targetStatus: ['assigned', 'in_progress', 'pending', 'resolved', 'closed'].includes(b.targetStatus) ? b.targetStatus : '',
+          requireNotes: Boolean(b.requireNotes),
+          attachPhoto: Boolean(b.attachPhoto),
+          template: String(b.template || '')
+        }));
+      }
+    } catch (e) {
+      console.warn('Invalid it_action_buttons config:', e);
+    }
+  }
+  return getDefaultItActionButtons();
+}
+
+async function persistConfiguredActionButtons(list) {
+  const cleanJson = JSON.stringify(list);
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ it_action_buttons: cleanJson })
+  });
+  if (!res.ok) {
+    throw new Error('Gagal menyimpan konfigurasi button ke server');
+  }
+  appSettings = Object.assign({}, appSettings || {}, { it_action_buttons: cleanJson });
+  renderActionButtonsInTicketModal();
+  if (currentTab === 'technician') loadTechnicianTickets();
+}
+
+function renderActionWaTemplate(template, ticket, liveNotes, liveSuggestion, options = {}) {
+  const techName = activeUser ? activeUser.name : 'Tim IT RSUD Labuha';
+  const reporterName = ticket?.reporter_name || 'Bapak/Ibu';
+  const roomName = ticket?.room_name || 'Ruangan RSUD';
+  const ticketNo = ticket?.ticket_no || '';
+  const rawTitle = String(ticket?.title || '').trim();
+  const rawDesc = String(ticket?.description || '').trim();
+  const fullProblem = (rawDesc && rawDesc.length >= rawTitle.length) ? rawDesc : (rawTitle || '-');
+  const actionText = String(liveNotes !== undefined ? liveNotes : (ticket?.resolution_notes || '')).trim();
+  const suggText = String(liveSuggestion !== undefined ? liveSuggestion : (ticket?.improvement_suggestion || '')).trim();
+  const trackingUrl = ticketNo ? getTicketPublicTrackingUrl(ticketNo) : '';
+
+  let msg = String(template || '').trim();
+  if (!msg) {
+    return buildWhatsAppMessage(ticket, options.fallbackType || 'in_progress', actionText, suggText, options);
+  }
+
+  if (!actionText) {
+    msg = msg.replace(/\n*\*[^\n*]*:\*\s*\n?\{hasil\}[ \t]*/gi, '');
+  }
+  if (!suggText) {
+    msg = msg.replace(/\n*\*[^\n*]*:\*\s*\n?\{usulan\}[ \t]*/gi, '');
+  }
+
+  return msg
+    .replace(/\{pelapor\}/gi, reporterName)
+    .replace(/\{ruangan\}/gi, roomName)
+    .replace(/\{tiket\}/gi, ticketNo)
+    .replace(/\{teknisi\}/gi, techName)
+    .replace(/\{keluhan\}/gi, fullProblem)
+    .replace(/\{hasil\}/gi, actionText || '-')
+    .replace(/\{usulan\}/gi, suggText || '-')
+    .replace(/\{link\}/gi, trackingUrl)
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function renderActionButtonsInTicketModal() {
+  const grid = document.getElementById('modalActionButtonsGrid');
+  if (!grid) return;
+  const buttons = getConfiguredActionButtons();
+  grid.innerHTML = '';
+
+  buttons.forEach(btn => {
+    const colorCls = ACTION_BTN_COLOR_MAP[btn.color] || ACTION_BTN_COLOR_MAP.sky;
+    const statusHint = btn.targetStatus === 'in_progress'
+      ? 'Ubah ke Sedang Diproses + Kirim WA'
+      : btn.targetStatus === 'resolved'
+        ? 'Kirim WA + Tandai Selesai & Kunci'
+        : btn.targetStatus === 'pending'
+          ? 'Ubah ke Pending + Kirim WA'
+          : 'Kirim WA ke Pelapor';
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `flex-1 min-w-[130px] px-3 py-2.5 ${colorCls} rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-sm active:scale-95`;
+    el.title = statusHint;
+    el.setAttribute('data-action-btn-id', btn.id);
+    el.setAttribute('data-action-btn-key', btn.key);
+    el.onclick = () => executeItActionButton(btn.id);
+    el.innerHTML = `<span>${esc(btn.emoji || '💬')}</span><span>${esc(btn.label)}</span>`;
+    grid.appendChild(el);
+  });
+}
+
+async function submitTicketStatusChange(ticket, status, opts = {}) {
+  const formData = new FormData();
+  formData.append('status', status);
+  formData.append('notes', opts.notes || '');
+  formData.append('improvement_suggestion', opts.improvementSuggestion || '');
+  formData.append('user_name', activeUser ? activeUser.name : 'Teknisi IT');
+  if (opts.isDraft) {
+    formData.append('is_draft', '1');
+  }
+  if (opts.actionLabel) {
+    formData.append('action_label', opts.actionLabel);
+  }
+  if (opts.proofFile) {
+    formData.append('proof_photo', opts.proofFile);
+  }
+
+  const res = await fetch(`/api/tickets/${ticket.id}/status`, {
+    method: 'PATCH',
+    body: formData
+  });
+  const resData = await res.json();
+  if (!res.ok) {
+    throw new Error(resData.error || 'Gagal memperbarui status tiket');
+  }
+  return resData.ticket;
+}
+
+async function executeItActionOnTicket(ticket, btn, opts = {}) {
+  if (!ticket || !btn) return false;
+
+  const isDone = ticket.status === 'resolved' || ticket.status === 'closed';
   if (isDone) {
-    Swal.fire('Tiket Terkunci', 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen. Tidak dapat diotak-atik lagi.', 'info');
-    return;
+    Swal.fire('Tiket Terkunci', 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen.', 'info');
+    return false;
+  }
+
+  if (!ticket.assigned_to) {
+    Swal.fire('Ambil Tiket Dulu', 'Silakan klik tombol "Ambil Tiket Ini" terlebih dahulu sebelum melakukan tindakan atau mengirim WhatsApp.', 'warning');
+    return false;
   }
 
   const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
-  const isAssignedToMe = activeUser && selectedTicketForModal.assigned_to && (selectedTicketForModal.assigned_to === activeUser.id || selectedTicketForModal.assigned_to_name === activeUser.name);
-
-  // Strict Lock: Non-coordinator cannot update status of tickets handled by other techs
-  if (selectedTicketForModal.assigned_to && !isAssignedToMe && !isCoordinator) {
-    Swal.fire('Akses Ditolak', 'Tiket ini terkunci dan sedang ditangani oleh teknisi lain. Hanya teknisi tersebut atau Koordinator IT yang dapat memperbarui status tiket.', 'error');
-    return;
+  const isAssignedToMe = activeUser && ticket.assigned_to && (ticket.assigned_to === activeUser.id || ticket.assigned_to_name === activeUser.name);
+  if (ticket.assigned_to && !isAssignedToMe && !isCoordinator) {
+    Swal.fire('Akses Ditolak', `Tiket ini sedang dikerjakan oleh ${ticket.assigned_to_name || 'Teknisi lain'}. Tombol aksi dikunci untuk Anda.`, 'warning');
+    return false;
   }
 
-  const status = document.getElementById('modalNewStatus').value;
-  const notes = document.getElementById('modalResolutionNotes').value;
-  const improvementSuggestion = (document.getElementById('modalImprovementSuggestion')?.value || '').trim();
-  const proofPhotoInput = document.getElementById('modalProofPhoto');
+  const inModal = Boolean(opts.inModal && selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticket.id));
+  const notesEl = inModal ? document.getElementById('modalResolutionNotes') : null;
+  const suggEl = inModal ? document.getElementById('modalImprovementSuggestion') : null;
+  const proofInput = inModal ? document.getElementById('modalProofPhoto') : null;
 
-  const isClosingStatus = status === 'resolved' || status === 'closed';
-  const hasReporterPhone = String(selectedTicketForModal.reporter_phone || '').replace(/\D/g, '').length >= 6;
-  if (isClosingStatus && hasReporterPhone && !hasTicketSentWa(selectedTicketForModal, selectedTicketLogs)) {
-    const waPrompt = await Swal.fire({
-      icon: 'warning',
-      title: 'Wajib Kirim WA ke Pelapor Dulu',
-      html: `
-        <p class="text-xs text-slate-600 leading-relaxed">
-          Sesuai prosedur layanan IT, teknisi wajib <b>mengirim pesan WhatsApp ke pelapor</b> terlebih dahulu sebelum status tiket dapat diubah menjadi <b>Selesai</b>.
-        </p>
-      `,
-      showCancelButton: true,
-      showDenyButton: true,
-      confirmButtonText: '💬 Kirim WA Hasil Pengerjaan',
-      denyButtonText: '🚀 Kirim WA OTW',
-      cancelButtonText: 'Batal',
-      confirmButtonColor: '#059669',
-      denyButtonColor: '#0284c7'
-    });
-    if (waPrompt.isConfirmed) {
-      await sendWhatsAppDirect('done');
-    } else if (waPrompt.isDenied) {
-      await sendWhatsAppDirect('otw');
+  const liveNotes = String(opts.liveNotes !== undefined ? opts.liveNotes : (notesEl ? notesEl.value : (ticket.resolution_notes || ''))).trim();
+  const liveSuggestion = String(opts.liveSuggestion !== undefined ? opts.liveSuggestion : (suggEl ? suggEl.value : (ticket.improvement_suggestion || ''))).trim();
+  const selectedProofFile = opts.proofFile || (proofInput && proofInput.files && proofInput.files[0] ? proofInput.files[0] : null);
+
+  if (btn.requireNotes && !liveNotes) {
+    if (!inModal) {
+      await openTicketModal(ticket.id);
+      const focusEl = document.getElementById('modalResolutionNotes');
+      if (focusEl) focusEl.focus();
     }
-    return;
+    await Swal.fire({
+      icon: 'warning',
+      title: 'Isi Hasil Pengerjaan Dulu',
+      text: `Mohon isi kolom "Hasil Pengerjaan / Tindak Lanjut" terlebih dahulu sebelum menekan tombol "${btn.label}".`,
+      confirmButtonColor: '#0284c7'
+    });
+    const elAfter = document.getElementById('modalResolutionNotes');
+    if (elAfter) elAfter.focus();
+    return false;
   }
 
-  const savedTicketNo = selectedTicketForModal.ticket_no;
-  const savedRoom = selectedTicketForModal.room_name;
-  const savedAssignedTo = Number(selectedTicketForModal.assigned_to || 0);
-  const ticketId = selectedTicketForModal.id;
+  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url);
+  const message = renderActionWaTemplate(btn.template, ticket, liveNotes, liveSuggestion, {
+    hasPhoto,
+    fallbackType: btn.key
+  });
 
-  const formData = new FormData();
-  formData.append('status', status);
-  formData.append('notes', notes);
-  formData.append('improvement_suggestion', improvementSuggestion);
-  formData.append('user_name', activeUser.name);
-  if (proofPhotoInput.files && proofPhotoInput.files[0]) {
-    formData.append('proof_photo', proofPhotoInput.files[0]);
+  let cleanPhone = String(ticket.reporter_phone || '').replace(/\D/g, '');
+  if (cleanPhone.startsWith('0')) {
+    cleanPhone = '62' + cleanPhone.substring(1);
+  }
+  const hasPhone = cleanPhone.length >= 6;
+  const waUrl = hasPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}` : '';
+  const nativePlugin = window.Capacitor?.Plugins?.EtiketNative;
+
+  // Dispatch WA cleanly: native photo intent on APK v1.5+ when attachPhoto is enabled, otherwise synchronous window.open
+  let waDispatched = false;
+  if (hasPhone) {
+    if (btn.attachPhoto && hasPhoto && nativePlugin && typeof nativePlugin.shareToWhatsApp === 'function') {
+      const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
+      if (imgDataUrl && imgDataUrl.startsWith('data:image/')) {
+        await copyTextSafe(message);
+        try {
+          const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const ext = mimeType.includes('png') ? 'png' : 'jpg';
+          const shareRes = await nativePlugin.shareToWhatsApp({
+            phone: cleanPhone,
+            message,
+            imageBase64: imgDataUrl,
+            mimeType,
+            filename: `Bukti-${ticket.ticket_no || ticket.id}.${ext}`
+          });
+          if (shareRes && shareRes.ok) {
+            waDispatched = true;
+          }
+        } catch (nativeErr) {
+          console.warn('Native WA share fallback ke wa.me:', nativeErr);
+        }
+      }
+      if (!waDispatched) {
+        window.open(waUrl, '_blank');
+        waDispatched = true;
+      }
+    } else if (btn.attachPhoto && hasPhoto && nativePlugin && typeof nativePlugin.exportBase64File === 'function') {
+      const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
+      if (imgDataUrl && imgDataUrl.startsWith('data:image/')) {
+        const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+        const ext = mimeType.includes('png') ? 'png' : 'jpg';
+        const base64Only = imgDataUrl.includes(',') ? imgDataUrl.split(',')[1] : imgDataUrl;
+        await copyTextSafe(message);
+        await nativePlugin.exportBase64File({
+          filename: `Bukti-${ticket.ticket_no || ticket.id}.${ext}`,
+          mimeType,
+          base64: base64Only
+        });
+        waDispatched = true;
+      } else {
+        window.open(waUrl, '_blank');
+        waDispatched = true;
+      }
+    } else {
+      window.open(waUrl, '_blank');
+      waDispatched = true;
+    }
   }
 
   try {
-    const res = await fetch(`/api/tickets/${ticketId}/status`, {
-      method: 'PATCH',
-      body: formData
-    });
-    const resData = await res.json();
-    if (!res.ok) throw new Error(resData.error || 'Gagal memperbarui status tiket');
+    if (waDispatched) {
+      await recordTicketWaSent(ticket.id, btn.key || btn.label, message);
+    }
 
-    closeModal();
+    const targetStatus = (btn.targetStatus || '').trim();
+    const notesChanged = Boolean(liveNotes && liveNotes !== String(ticket.resolution_notes || '').trim());
+    const suggChanged = Boolean(liveSuggestion && liveSuggestion !== String(ticket.improvement_suggestion || '').trim());
+    const willChangeStatus = Boolean(targetStatus && targetStatus !== ticket.status);
+
+    if (willChangeStatus || selectedProofFile || notesChanged || suggChanged) {
+      const nextStatus = targetStatus || ticket.status || 'assigned';
+      const updated = await submitTicketStatusChange(ticket, nextStatus, {
+        notes: liveNotes || ticket.resolution_notes || '',
+        improvementSuggestion: liveSuggestion || ticket.improvement_suggestion || '',
+        proofFile: selectedProofFile,
+        isDraft: !willChangeStatus,
+        actionLabel: willChangeStatus ? `${btn.emoji || ''} ${btn.label}`.trim() : ''
+      });
+      if (updated) {
+        Object.assign(ticket, updated);
+      }
+    }
 
     if (window.soundAlert) window.soundAlert.playSuccess();
 
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: status === 'resolved' || status === 'closed' ? 'success' : 'info',
-      title: status === 'resolved' || status === 'closed' ? `✅ Tiket Selesai & Dikunci!` : `🔄 Status Tiket Diperbarui`,
-      text: `${savedTicketNo} (${savedRoom}) kini ${status.toUpperCase()}`,
-      showConfirmButton: false,
-      timer: 4500,
-      timerProgressBar: true
-    });
-
-    const isResolvedStatus = status === 'resolved' || status === 'closed';
-    notifyNativeGeneric(
-      isResolvedStatus ? `✅ Tiket Selesai: ${savedRoom}` : `🔄 Status Tiket: ${savedRoom}`,
-      isResolvedStatus
-        ? `${savedTicketNo} telah selesai dikerjakan oleh ${activeUser.name || 'Tim IT'}${notes ? ' • ' + notes : ''}`
-        : `${savedTicketNo} status: ${status.toUpperCase()}`,
-      {
-        ticketId,
-        ticketNo: savedTicketNo,
-        roomName: savedRoom,
-        status,
-        assignedTo: savedAssignedTo,
-        eventType: isResolvedStatus ? 'resolved' : 'status'
-      }
-    );
+    const isResolvedStatus = targetStatus === 'resolved' || targetStatus === 'closed';
+    if (willChangeStatus) {
+      notifyNativeGeneric(
+        isResolvedStatus ? `✅ Tiket Selesai: ${ticket.room_name}` : `${btn.emoji || '🔧'} ${btn.label}: ${ticket.room_name}`,
+        isResolvedStatus
+          ? `${ticket.ticket_no} telah selesai dikerjakan oleh ${activeUser.name || 'Tim IT'}${liveNotes ? ' • ' + liveNotes : ''}`
+          : `${ticket.ticket_no} status: ${targetStatus.toUpperCase()}`,
+        {
+          ticketId: ticket.id,
+          ticketNo: ticket.ticket_no,
+          roomName: ticket.room_name,
+          status: targetStatus,
+          assignedTo: Number(ticket.assigned_to || 0),
+          eventType: isResolvedStatus ? 'resolved' : 'status'
+        }
+      );
+    }
 
     await loadTickets();
     await loadStats();
     if (currentTab === 'technician') loadTechnicianTickets();
+
+    if (isResolvedStatus) {
+      if (inModal) closeModal();
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `✅ Tiket Selesai & Dikunci!`,
+        text: `${ticket.ticket_no} (${ticket.room_name}) telah dikabarkan ke pelapor via WA`,
+        showConfirmButton: false,
+        timer: 4500,
+        timerProgressBar: true
+      });
+    } else {
+      if (inModal) {
+        await openTicketModal(ticket.id);
+      }
+      Swal.fire({
+        toast: true,
+        position: 'top-end',
+        icon: 'success',
+        title: `${btn.emoji || '✅'} ${btn.label}`,
+        text: willChangeStatus
+          ? `WA dibuka & status diubah menjadi ${targetStatus === 'in_progress' ? 'Sedang Diproses' : targetStatus.toUpperCase()}`
+          : 'Pesan WhatsApp dibuka & aktivitas tercatat di log tiket.',
+        showConfirmButton: false,
+        timer: 3800,
+        timerProgressBar: true
+      });
+    }
+    return true;
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal menjalankan aksi tiket', 'error');
+    return false;
+  }
+}
+
+async function executeItActionButton(buttonId) {
+  if (!selectedTicketForModal) return false;
+  const buttons = getConfiguredActionButtons();
+  const btn = buttons.find(b => b.id === buttonId || b.key === buttonId);
+  if (!btn) return false;
+  return executeItActionOnTicket(selectedTicketForModal, btn, { inModal: true });
+}
+
+async function executeItActionByTicketId(ticketId, buttonId) {
+  const t = (allTickets || []).find(item => Number(item.id) === Number(ticketId)) || selectedTicketForModal;
+  if (!t) return false;
+  const buttons = getConfiguredActionButtons();
+  const btn = buttons.find(b => b.id === buttonId || b.key === buttonId);
+  if (!btn) return false;
+  return executeItActionOnTicket(t, btn, { inModal: false });
+}
+
+function openManageActionButtonsModal() {
+  const modal = document.getElementById('actionButtonsManagerModal');
+  if (!modal) return;
+  renderActionButtonsManagerList();
+  startNewActionButton();
+  modal.classList.remove('hidden');
+}
+
+function closeManageActionButtonsModal() {
+  const modal = document.getElementById('actionButtonsManagerModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function renderActionButtonsManagerList() {
+  const container = document.getElementById('actionButtonsManagerList');
+  if (!container) return;
+  const buttons = getConfiguredActionButtons();
+  container.innerHTML = '';
+
+  const statusLabels = {
+    '': 'Hanya Kirim WA (Status Tetap)',
+    in_progress: 'Ubah Status → Sedang Diproses',
+    pending: 'Ubah Status → Pending',
+    resolved: 'Ubah Status → Selesai & Kunci',
+    closed: 'Ubah Status → Ditutup'
+  };
+
+  buttons.forEach(btn => {
+    const badgeCls = ACTION_BADGE_COLOR_MAP[btn.color] || ACTION_BADGE_COLOR_MAP.sky;
+    const row = document.createElement('div');
+    row.className = 'bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2 shadow-xs';
+    row.innerHTML = `
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold ${badgeCls}">
+          <span>${esc(btn.emoji || '💬')}</span>
+          <span>${esc(btn.label)}</span>
+        </span>
+        <div class="text-[11px] text-slate-600 min-w-0">
+          <span class="font-semibold block truncate">${esc(statusLabels[btn.targetStatus || ''] || btn.targetStatus)}</span>
+          <span class="text-[10px] text-slate-400">
+            ${btn.requireNotes ? 'Wajib Hasil' : 'Tanpa Wajib Hasil'}${btn.attachPhoto ? ' • Foto WA APK' : ''}
+          </span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button type="button" onclick="editActionButton('${esc(btn.id)}')" class="px-2.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-[11px] font-bold transition">✏️ Edit</button>
+        <button type="button" onclick="deleteActionButton('${esc(btn.id)}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold transition">🗑️</button>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function startNewActionButton() {
+  document.getElementById('abEditId').value = '';
+  document.getElementById('abFormTitle').textContent = '➕ Tambah Button Baru';
+  document.getElementById('abSubmitBtn').textContent = 'Tambah Button';
+  document.getElementById('abEmoji').value = '💬';
+  document.getElementById('abLabel').value = '';
+  document.getElementById('abColor').value = 'indigo';
+  document.getElementById('abTargetStatus').value = '';
+  document.getElementById('abRequireNotes').checked = false;
+  document.getElementById('abAttachPhoto').checked = false;
+  document.getElementById('abTemplate').value =
+    'Halo {pelapor},\n\nUpdate penanganan kendala IT di *{ruangan}* (Tiket: *{tiket}*) oleh *{teknisi}*:\n\n*Keluhan:*\n{keluhan}\n\n*Tindak Lanjut:*\n{hasil}\n\n🔍 *Pantau Progres:* {link}\n\nTerima kasih.';
+}
+
+function editActionButton(buttonId) {
+  const buttons = getConfiguredActionButtons();
+  const btn = buttons.find(b => b.id === buttonId);
+  if (!btn) return;
+  document.getElementById('abEditId').value = btn.id;
+  document.getElementById('abFormTitle').textContent = `✏️ Edit Button: ${btn.label}`;
+  document.getElementById('abSubmitBtn').textContent = 'Simpan Perubahan Button';
+  document.getElementById('abEmoji').value = btn.emoji || '💬';
+  document.getElementById('abLabel').value = btn.label || '';
+  document.getElementById('abColor').value = btn.color || 'sky';
+  document.getElementById('abTargetStatus').value = btn.targetStatus || '';
+  document.getElementById('abRequireNotes').checked = Boolean(btn.requireNotes);
+  document.getElementById('abAttachPhoto').checked = Boolean(btn.attachPhoto);
+  document.getElementById('abTemplate').value = btn.template || '';
+  document.getElementById('abLabel').focus();
+}
+
+function insertActionPlaceholder(token) {
+  const ta = document.getElementById('abTemplate');
+  if (!ta) return;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? ta.value.length;
+  ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+  ta.focus();
+  const nextPos = start + token.length;
+  ta.setSelectionRange(nextPos, nextPos);
+}
+
+async function submitActionButtonForm(event) {
+  event.preventDefault();
+  const editId = (document.getElementById('abEditId')?.value || '').trim();
+  const label = (document.getElementById('abLabel')?.value || '').trim();
+  const emoji = (document.getElementById('abEmoji')?.value || '💬').trim() || '💬';
+  const color = (document.getElementById('abColor')?.value || 'sky').trim();
+  const targetStatus = (document.getElementById('abTargetStatus')?.value || '').trim();
+  const requireNotes = Boolean(document.getElementById('abRequireNotes')?.checked);
+  const attachPhoto = Boolean(document.getElementById('abAttachPhoto')?.checked);
+  const template = (document.getElementById('abTemplate')?.value || '').trim();
+
+  if (!label || !template) {
+    Swal.fire('Peringatan', 'Nama button dan template pesan WhatsApp wajib diisi.', 'warning');
+    return;
+  }
+
+  const list = getConfiguredActionButtons().map(item => Object.assign({}, item));
+  if (editId) {
+    const idx = list.findIndex(item => item.id === editId);
+    if (idx !== -1) {
+      list[idx] = Object.assign({}, list[idx], {
+        label,
+        emoji,
+        color,
+        targetStatus,
+        requireNotes,
+        attachPhoto,
+        template
+      });
+    }
+  } else {
+    const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'custom';
+    list.push({
+      id: `btn_${slug}_${Date.now()}`,
+      key: `${slug}_${Date.now()}`,
+      label,
+      emoji,
+      color,
+      targetStatus,
+      requireNotes,
+      attachPhoto,
+      template
+    });
+  }
+
+  try {
+    await persistConfiguredActionButtons(list);
+    renderActionButtonsManagerList();
+    startNewActionButton();
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: editId ? 'Button Diperbarui!' : 'Button Baru Ditambahkan!',
+      text: 'Perubahan langsung aktif di modal tiket & HP teknisi.',
+      showConfirmButton: false,
+      timer: 2500
+    });
+  } catch (err) {
+    Swal.fire('Error', err.message, 'error');
+  }
+}
+
+async function deleteActionButton(buttonId) {
+  const list = getConfiguredActionButtons();
+  if (list.length <= 1) {
+    Swal.fire('Peringatan', 'Minimal harus ada 1 button aksi yang aktif.', 'warning');
+    return;
+  }
+  const target = list.find(b => b.id === buttonId);
+  const ans = await Swal.fire({
+    icon: 'warning',
+    title: `Hapus Button "${target?.label || ''}"?`,
+    text: 'Button akan dihapus untuk seluruh petugas IT. Anda tetap bisa Reset Bawaan kapan saja.',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Hapus',
+    cancelButtonText: 'Batal',
+    confirmButtonColor: '#e11d48'
+  });
+  if (!ans.isConfirmed) return;
+
+  try {
+    await persistConfiguredActionButtons(list.filter(b => b.id !== buttonId));
+    renderActionButtonsManagerList();
+    startNewActionButton();
+  } catch (err) {
+    Swal.fire('Error', err.message, 'error');
+  }
+}
+
+async function resetDefaultActionButtons() {
+  const ans = await Swal.fire({
+    icon: 'question',
+    title: 'Kembalikan 3 Button Bawaan?',
+    text: 'Mengembalikan button OTW Lokasi, Sedang Diproses, dan Selesai ke setelan awal.',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Kembalikan',
+    cancelButtonText: 'Batal'
+  });
+  if (!ans.isConfirmed) return;
+
+  try {
+    await persistConfiguredActionButtons(getDefaultItActionButtons());
+    renderActionButtonsManagerList();
+    startNewActionButton();
+    Swal.fire({
+      toast: true,
+      position: 'top-end',
+      icon: 'success',
+      title: 'Button dikembalikan ke setelan awal!',
+      showConfirmButton: false,
+      timer: 2000
+    });
   } catch (err) {
     Swal.fire('Error', err.message, 'error');
   }
@@ -2826,7 +3389,7 @@ function loadTechnicianTickets() {
     techRoleEl.textContent = isCoord ? 'Koordinator IT' : 'Teknisi IT';
   }
 
-  const myTickets = allTickets.filter(t => t.assigned_to === activeUser.id && t.status !== 'closed');
+  const myTickets = allTickets.filter(t => t.assigned_to === activeUser.id && t.status !== 'resolved' && t.status !== 'closed');
   document.getElementById('techActiveCount').textContent = myTickets.length;
   document.getElementById('badgeMyTickets').textContent = myTickets.length;
 
@@ -2841,15 +3404,30 @@ function loadTechnicianTickets() {
     return;
   }
 
+  const actionButtons = getConfiguredActionButtons();
+  const statusLabels = {
+    assigned: 'Diambil / Ditugaskan',
+    in_progress: 'Sedang Diproses',
+    pending: 'Pending'
+  };
+
   myTickets.forEach(t => {
     const card = document.createElement('div');
     card.className = 'bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3';
+    const quickButtonsHtml = actionButtons.slice(0, 3).map(btn => {
+      const cls = ACTION_BTN_COLOR_MAP[btn.color] || ACTION_BTN_COLOR_MAP.sky;
+      return `<button type="button" onclick="executeItActionByTicketId(${t.id}, '${esc(btn.id)}')" class="px-3 py-2 ${cls} rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm"><span>${esc(btn.emoji || '💬')}</span><span>${esc(btn.label)}</span></button>`;
+    }).join('');
+
     card.innerHTML = `
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-2">
         <span class="font-mono font-bold text-xs text-sky-700">${esc(t.ticket_no)}</span>
-        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.priority === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}">
-          ${esc(t.priority)}
-        </span>
+        <div class="flex items-center gap-1.5">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">${esc(statusLabels[t.status] || t.status)}</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.priority === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}">
+            ${esc(t.priority)}
+          </span>
+        </div>
       </div>
       <div>
         <h3 class="font-bold text-slate-800 text-sm">${esc(t.title)}</h3>
@@ -2860,12 +3438,9 @@ function loadTechnicianTickets() {
         <p><strong>👤 Pelapor:</strong> ${esc(t.reporter_name)} (${esc(t.reporter_phone)})</p>
       </div>
       <div class="pt-2 flex flex-wrap gap-2">
-        <button onclick="openTicketModal(${t.id})" class="flex-1 min-w-[130px] py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition">
-          Perbarui Tindakan / Selesai
-        </button>
-        <button onclick="sendDirectWaByTicketId(${t.id}, 'done')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm" title="Kirim WA Selesai">
-          <i data-lucide="message-circle" class="w-4 h-4"></i>
-          <span>WA Selesai</span>
+        ${quickButtonsHtml}
+        <button type="button" onclick="openTicketModal(${t.id})" class="flex-1 min-w-[120px] py-2 px-3 bg-slate-800 hover:bg-black text-white rounded-xl text-xs font-bold transition">
+          Buka Detail / Isi Hasil
         </button>
       </div>
     `;
@@ -2896,6 +3471,11 @@ function getTicketPublicTrackingUrl(ticketNo) {
 }
 
 function buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion, options = {}) {
+  const buttons = getConfiguredActionButtons();
+  const matched = buttons.find(b => b.key === type || b.id === type);
+  if (matched && matched.template) {
+    return renderActionWaTemplate(matched.template, ticket, liveNotes, liveSuggestion, options);
+  }
   const techName = activeUser ? activeUser.name : 'Tim IT RSUD Labuha';
   const reporterName = ticket?.reporter_name || 'Bapak/Ibu';
   const roomName = ticket?.room_name || 'Ruangan RSUD';
@@ -2988,34 +3568,25 @@ async function saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, proofF
   if (!proofFile && !notesChanged && !suggChanged) return ticket;
 
   try {
-    const draftStatus = ticket.status === 'pending' ? 'pending' : 'in_progress';
-    const formData = new FormData();
-    formData.append('status', draftStatus);
-    formData.append('notes', trimmedNotes || ticket.resolution_notes || '');
-    formData.append('improvement_suggestion', trimmedSugg || ticket.improvement_suggestion || '');
-    formData.append('user_name', activeUser ? activeUser.name : 'Teknisi IT');
-    formData.append('is_draft', '1');
-    if (proofFile) {
-      formData.append('proof_photo', proofFile);
-    }
-
-    const res = await fetch(`/api/tickets/${ticket.id}/status`, {
-      method: 'PATCH',
-      body: formData
+    const draftStatus = ticket.status === 'pending' ? 'pending' : (ticket.status === 'in_progress' ? 'in_progress' : 'assigned');
+    const updated = await submitTicketStatusChange(ticket, draftStatus, {
+      notes: trimmedNotes || ticket.resolution_notes || '',
+      improvementSuggestion: trimmedSugg || ticket.improvement_suggestion || '',
+      proofFile,
+      isDraft: true
     });
-    const resData = await res.json();
-    if (res.ok && resData && resData.ticket) {
-      Object.assign(ticket, resData.ticket);
+    if (updated) {
+      Object.assign(ticket, updated);
       const idx = (allTickets || []).findIndex(item => Number(item.id) === Number(ticket.id));
       if (idx !== -1) {
-        allTickets[idx] = Object.assign({}, allTickets[idx], resData.ticket);
+        allTickets[idx] = Object.assign({}, allTickets[idx], updated);
       }
       if (selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticket.id)) {
-        if (resData.ticket.proof_photo_url) {
+        if (updated.proof_photo_url) {
           const proofWrap = document.getElementById('modalProofPhotoWrap');
           const proofImg = document.getElementById('modalProofPhotoPreview');
           const photosSec = document.getElementById('modalPhotosSection');
-          if (proofImg) proofImg.src = resData.ticket.proof_photo_url;
+          if (proofImg) proofImg.src = updated.proof_photo_url;
           if (proofWrap) proofWrap.classList.remove('hidden');
           if (photosSec) photosSec.classList.remove('hidden');
         }
@@ -3116,8 +3687,6 @@ async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
     return true;
   }
 
-  // Web Browser: buka wa.me langsung secara sinkron agar tidak diblokir popup blocker,
-  // sekaligus upload draft foto bukti & catatan ke server agar link track.html langsung lengkap
   window.open(waUrl, '_blank');
   await saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, selectedProofFile);
   await recordTicketWaSent(ticket.id, type, message);
@@ -3149,6 +3718,10 @@ async function copyTextSafe(text) {
 async function sendWaPhotoDirect() {
   if (!selectedTicketForModal) return;
   const t = selectedTicketForModal;
+  if (!t.assigned_to) {
+    Swal.fire('Ambil Tiket Dulu', 'Ambil tiket terlebih dahulu sebelum mengirim foto ke WhatsApp.', 'warning');
+    return;
+  }
   const isDone = t.status === 'resolved' || t.status === 'closed';
   if (isDone) {
     Swal.fire('Tiket Terkunci', 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen.', 'info');
@@ -3199,7 +3772,6 @@ async function sendWaPhotoDirect() {
     }
   }
 
-  // APK v1.4 native share fallback via exportBase64File (sudah tersedia di APK v1.4!) + clipboard
   if (nativePlugin && typeof nativePlugin.exportBase64File === 'function') {
     const base64Only = imgDataUrl.includes(',') ? imgDataUrl.split(',')[1] : imgDataUrl;
     Swal.fire({
@@ -3215,7 +3787,6 @@ async function sendWaPhotoDirect() {
     return;
   }
 
-  // Browser Web Share API (HP modern)
   try {
     const blob = await (await fetch(imgDataUrl)).blob();
     const file = new File([blob], filename, { type: mimeType });
@@ -3228,7 +3799,6 @@ async function sendWaPhotoDirect() {
     if (shareErr && shareErr.name === 'AbortError') return;
   }
 
-  // Fallback desktop browser: download foto & buka wa.me dengan penjelasan lengkap + link foto
   if (typeof window.downloadQrPng === 'function') {
     await window.downloadQrPng(imgDataUrl, filename).catch(() => { });
   }
@@ -3239,62 +3809,11 @@ async function sendWaPhotoDirect() {
 }
 
 async function sendDirectWaByTicketId(ticketId, type) {
-  const t = (allTickets || []).find(item => item.id === ticketId) || selectedTicketForModal;
-  if (!t) return;
-  if (type === 'done' && !String(t.resolution_notes || '').trim()) {
-    await openTicketModal(t.id);
-    const notesEl = document.getElementById('modalResolutionNotes');
-    if (notesEl) notesEl.focus();
-    Swal.fire({
-      toast: true,
-      position: 'top-end',
-      icon: 'info',
-      title: 'Isi Hasil Pengerjaan terlebih dahulu untuk dikirim via WA Selesai',
-      showConfirmButton: false,
-      timer: 3500
-    });
-    return;
-  }
-  await dispatchDirectWa(t, type, t.resolution_notes || '', t.improvement_suggestion || '');
+  return executeItActionByTicketId(ticketId, type);
 }
 
-// Kirim Pesan WhatsApp Langsung dari HP Teknisi (100% Gratis Tanpa Bot)
 async function sendWhatsAppDirect(type) {
-  if (!selectedTicketForModal) return;
-  const t = selectedTicketForModal;
-
-  const isDone = t.status === 'resolved' || t.status === 'closed';
-  if (isDone) {
-    Swal.fire('Tiket Terkunci', 'Tiket ini telah selesai dikerjakan dan dikunci secara permanen.', 'info');
-    return;
-  }
-
-  const isCoordinator = activeUser && (activeUser.role === 'koordinator' || activeUser.role === 'kepala_it' || activeUser.role === 'superadmin');
-  const isAssignedToMe = activeUser && t.assigned_to && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name);
-
-  // Strict Lock: Non-assigned tech cannot send WhatsApp
-  if (t.assigned_to && !isAssignedToMe && !isCoordinator) {
-    Swal.fire('Akses Ditolak', `Tiket ini sedang dikerjakan oleh ${t.assigned_to_name || 'Teknisi lain'}. Tombol WhatsApp dikunci untuk Anda.`, 'warning');
-    return;
-  }
-
-  const notesEl = document.getElementById('modalResolutionNotes');
-  const suggEl = document.getElementById('modalImprovementSuggestion');
-  const liveNotes = (notesEl ? notesEl.value : (t.resolution_notes || '')).trim();
-  const liveSuggestion = (suggEl ? suggEl.value : (t.improvement_suggestion || '')).trim();
-
-  if (type === 'done' && !liveNotes) {
-    await Swal.fire({
-      icon: 'warning',
-      title: 'Isi Hasil Pengerjaan Dulu',
-      text: 'Mohon isi kolom "Hasil Pengerjaan / Tindak Lanjut" terlebih dahulu agar isi pesan WhatsApp ke pelapor otomatis mengambil keterangan pengerjaan Anda.',
-      confirmButtonColor: '#0284c7'
-    });
-    if (notesEl) notesEl.focus();
-    return;
-  }
-
-  await dispatchDirectWa(t, type, liveNotes, liveSuggestion);
+  return executeItActionButton(type);
 }
 
 function sendDirectWaFromCard(ticketNo, roomName, reporterName, reporterPhone, title, type, resolutionNotes, improvementSuggestion) {
@@ -3766,7 +4285,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.7');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.8');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
@@ -4147,11 +4666,9 @@ function maybeShowWeeklyBackupReminder() {
   try {
     if (sessionStorage.getItem('etiket_backup_reminded') === '1') return;
     if (appSettings?.auto_backup_reminder === '0') return;
-    const apkBanner = document.getElementById('apkForceUpdateBanner');
-    if (apkBanner && !apkBanner.classList.contains('hidden')) return;
     let user = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
     if (!user) {
-      try { user = JSON.parse(localStorage.getItem('etiket_cached_user') || 'null'); } catch (e) {}
+      try { user = JSON.parse(localStorage.getItem('etiket_cached_user') || 'null'); } catch (e) { }
     }
     const isCoord = user && (user.role === 'koordinator' || user.role === 'kepala_it' || user.role === 'superadmin');
     if (!isCoord) return;
@@ -4174,7 +4691,7 @@ function maybeShowWeeklyBackupReminder() {
         });
       }
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 async function downloadDatabaseBackup() {
@@ -4265,6 +4782,7 @@ async function loadGatewaySettings() {
 
     updateSignersPreview();
     updateBackupStatusUi();
+    renderActionButtonsInTicketModal();
     const autoBackupCheckbox = document.getElementById('cfg_auto_backup_reminder');
     if (autoBackupCheckbox) {
       autoBackupCheckbox.checked = cfg.auto_backup_reminder !== '0';
@@ -4306,6 +4824,7 @@ async function saveGatewaySettings() {
   const payload = {
     app_server_url: serverUrlInput ? serverUrlInput.value.trim() : '',
     auto_backup_reminder: autoBackupCheckbox && !autoBackupCheckbox.checked ? '0' : '1',
+    it_action_buttons: appSettings && appSettings.it_action_buttons ? appSettings.it_action_buttons : JSON.stringify(getConfiguredActionButtons()),
     director_name: (document.getElementById('cfg_director_name')?.value || '').trim() || signers.directorName,
     director_nip: document.getElementById('cfg_director_nip') ? document.getElementById('cfg_director_nip').value.trim() : signers.directorNip,
     head_simrs_name: (document.getElementById('cfg_head_simrs_name')?.value || '').trim() || signers.headName,
@@ -4337,6 +4856,7 @@ async function saveGatewaySettings() {
     appSettings = Object.assign({}, appSettings || {}, payload);
     updateSignersPreview();
     updateBackupStatusUi();
+    renderActionButtonsInTicketModal();
 
     Swal.fire({
       icon: 'success',

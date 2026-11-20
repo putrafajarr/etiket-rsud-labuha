@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.7">
+  <link rel="stylesheet" href="/css/custom.css?v=4.8">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -215,7 +215,7 @@
       <div class="pt-3 mt-2 border-t border-slate-100 space-y-1">
         <button onclick="checkForWebAppUpdate(true); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sky-700 hover:bg-sky-50 transition text-left font-bold">
           <i data-lucide="refresh-cw" class="w-4 h-4 text-sky-600"></i>
-          <span>Cek Update Aplikasi (v4.7)</span>
+          <span>Cek Update Aplikasi</span>
         </button>
         <button onclick="testMobileHomeNotification(); toggleMobileMenu();" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-slate-600 hover:bg-slate-100 transition text-left">
           <i data-lucide="bell-ring" class="w-4 h-4 text-sky-600"></i>
@@ -850,7 +850,7 @@
               </button>
               <button type="button" onclick="checkForWebAppUpdate(true)" class="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center space-x-1.5">
                 <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-                <span>Cek Update Aplikasi (v4.7)</span>
+                <span>Cek Update Aplikasi</span>
               </button>
             </div>
             <p class="text-[10px] text-amber-900/80">
@@ -898,6 +898,21 @@
                 <span>Pengingat Backup Mingguan (Koordinator IT)</span>
               </label>
             </div>
+          </div>
+
+          <!-- Custom IT Action Buttons & WA Templates Shortcut -->
+          <div class="p-5 bg-sky-50/70 rounded-2xl border border-sky-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-start space-x-2.5">
+              <span class="text-xl shrink-0">🎛️</span>
+              <div>
+                <h4 class="font-bold text-sky-950 text-xs uppercase tracking-wider">Button Aksi Progres IT &amp; Template WhatsApp</h4>
+                <p class="text-[11px] text-sky-900/80 mt-0.5">Ubah label, warna, status otomatis, atau tambah tombol baru (mis. OTW Lokasi, Sedang Diproses, Menunggu Sparepart, Selesai) untuk semua HP &amp; Web IT.</p>
+              </div>
+            </div>
+            <button type="button" onclick="openManageActionButtonsModal()" class="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs transition shadow-sm flex items-center justify-center space-x-1.5 shrink-0">
+              <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+              <span>Edit / Tambah Button Aksi</span>
+            </button>
           </div>
 
           <!-- WhatsApp Gateway Settings -->
@@ -1068,7 +1083,10 @@
     <div class="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
       <div id="modalHeader" class="p-4 sm:p-5 bg-sky-600 text-white flex items-center justify-between shrink-0">
         <div>
-          <span class="text-xs text-white/80 font-bold uppercase tracking-wider">Detail Tindakan Tiket</span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs text-white/80 font-bold uppercase tracking-wider">Detail Tindakan Tiket</span>
+            <span id="modalCurrentStatusBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/20 text-white border border-white/25">-</span>
+          </div>
           <h3 id="modalTicketNo" class="text-lg sm:text-xl font-black font-mono">TKT-XXXX</h3>
         </div>
         <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-lg">✕</button>
@@ -1173,69 +1191,69 @@
             </div>
           </div>
 
-          <!-- Quick WhatsApp Button to Reporter (Locked inside Action Container) -->
-          <div id="modalWaBox" class="border-t pt-4 space-y-2">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                2. Komunikasi WhatsApp ke Pelapor
-              </label>
-              <span id="modalWaStatusBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                ⚠️ Wajib Kirim WA sebelum Selesai
-              </span>
-            </div>
-            <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col gap-3 shadow-sm">
-              <div class="flex items-center space-x-2.5">
-                <span class="text-2xl shrink-0">💬</span>
-                <div>
-                  <p class="text-xs font-bold text-emerald-900">Kirim WhatsApp ke Pelapor (1-Klik)</p>
-                  <p class="text-[10px] text-emerald-700">Isi WA otomatis dari Hasil Pengerjaan, Usulan Perbaikan, &amp; link foto. Gunakan tombol <b>Kirim Gambar ke WA</b> bila ingin langsung menempelkan file foto di HP (mendukung APK v1.4+).</p>
-                </div>
-              </div>
-              <div class="flex flex-wrap items-center gap-2 w-full">
-                <button type="button" onclick="sendWhatsAppDirect('otw')" class="flex-1 min-w-[110px] px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
-                  <span>🚀 OTW Lokasi</span>
-                </button>
-                <button type="button" onclick="sendWhatsAppDirect('done')" class="flex-1 min-w-[125px] px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm">
-                  <span>✅ Kabari Selesai</span>
-                </button>
-                <button type="button" onclick="sendWaPhotoDirect()" class="flex-1 min-w-[130px] px-3 py-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-[11px] font-bold transition flex items-center justify-center space-x-1 shadow-sm" title="Bagikan file foto bukti + salin penjelasan ke WhatsApp (berjalan di APK v1.4 ke atas)">
-                  <span>🖼️ Kirim Gambar (WA)</span>
-                </button>
+          <!-- Lock Notice: Must Claim / Assign Ticket First -->
+          <div id="modalNeedClaimNotice" class="hidden border-t pt-4">
+            <div class="p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-start space-x-2.5 text-amber-950">
+              <span class="text-lg shrink-0">🔒</span>
+              <div class="text-xs leading-relaxed">
+                <p class="font-bold">Ambil Tiket Terlebih Dahulu</p>
+                <p class="text-[11px] text-amber-800 mt-0.5">Silakan klik tombol <b>Ambil Tiket Ini</b> (atau tugaskan ke teknisi di atas) untuk membuka tombol aksi <b>OTW Lokasi</b>, <b>Sedang Diproses</b>, dan <b>Selesai</b> serta kolom hasil pengerjaan.</p>
               </div>
             </div>
           </div>
 
-          <!-- Status Change Section -->
-          <div class="border-t pt-4 space-y-3">
-            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-              3. Perbarui Status &amp; Hasil Pengerjaan
-            </label>
+          <!-- Quick Action & WhatsApp Progress Section (Unlocked only after Ticket Claimed) -->
+          <div id="modalWaBox" class="hidden border-t pt-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                2. Tindakan Pengerjaan &amp; Kirim WhatsApp
+              </label>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span id="modalWaStatusBadge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                  ⚠️ Wajib Kirim WA sebelum Selesai
+                </span>
+                <button type="button" onclick="openManageActionButtonsModal()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg text-[10px] font-bold transition flex items-center space-x-1" title="Tambah atau edit button aksi &amp; template WhatsApp">
+                  <span>⚙️</span>
+                  <span>Edit / Tambah Button</span>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Hasil Pengerjaan / Tindak Lanjut <span class="text-slate-400 font-normal">(otomatis masuk ke isi WA &amp; laporan)</span>:</label>
+              <textarea id="modalResolutionNotes" rows="2" placeholder="Tuliskan komponen yang diganti, perbaikan konfigurasi, atau tindakan yang dilakukan..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Ubah Status Ke:</label>
-                <select id="modalNewStatus" class="w-full text-xs p-2.5 border rounded-xl bg-white font-bold text-slate-800">
-                  <option value="in_progress">Sedang Dikerjakan (In Progress)</option>
-                  <option value="pending">Pending (Menunggu Sparepart/Vendor)</option>
-                  <option value="resolved">Selesai Diperbaiki (Resolved)</option>
-                  <option value="closed">Tutup Tiket (Closed)</option>
-                </select>
+                <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Usulan Perbaikan / Rekomendasi (Opsional):</label>
+                <textarea id="modalImprovementSuggestion" rows="2" placeholder="Contoh: Disarankan penggantian baterai UPS / peremajaan kabel LAN..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
               </div>
               <div>
                 <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Foto Bukti Perbaikan (Opsional):</label>
-                <input type="file" id="modalProofPhoto" accept="image/*" class="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100">
+                <input type="file" id="modalProofPhoto" accept="image/*" class="w-full text-xs p-1.5 border rounded-xl bg-slate-50 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100">
+                <span class="text-[10px] text-slate-400 block mt-1">Otomatis tersimpan &amp; ikut terkirim di APK v1.5 saat klik <b>Selesai</b>.</span>
               </div>
             </div>
-            <div>
-              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Hasil Pengerjaan / Tindak Lanjut (Otomatis masuk ke WA Selesai):</label>
-              <textarea id="modalResolutionNotes" rows="2" placeholder="Tuliskan komponen yang diganti, perbaikan konfigurasi, atau tindakan yang telah diambil..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
+
+            <div class="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col gap-2.5 shadow-sm">
+              <div class="flex items-center space-x-2.5">
+                <span class="text-2xl shrink-0">💬</span>
+                <div>
+                  <p class="text-xs font-bold text-emerald-950">Pilih Aksi Progres &amp; Kirim WA ke Pelapor (1-Klik)</p>
+                  <p class="text-[10px] text-emerald-800/85">Menekan <b>Sedang Diproses</b> otomatis mengubah status tiket menjadi <i>Sedang Dikerjakan</i>; menekan <b>Selesai</b> mengirim WA lalu menandai tiket <i>Selesai</i>.</p>
+                </div>
+              </div>
+              <div id="modalActionButtonsGrid" class="flex flex-wrap items-center gap-2 w-full">
+                <!-- Rendered dynamically from configured IT action buttons -->
+              </div>
+              <div id="modalExtraPhotoShareRow" class="pt-1 border-t border-emerald-200/70 flex items-center justify-between gap-2 text-[10px]">
+                <span class="text-emerald-800/80">Perlu bagikan file foto bukti terpisah?</span>
+                <button type="button" onclick="sendWaPhotoDirect()" class="px-2.5 py-1 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-bold transition shadow-xs flex items-center space-x-1 shrink-0" title="Bagikan file foto + salin penjelasan ke WhatsApp">
+                  <span>🖼️ Kirim Gambar (WA)</span>
+                </button>
+              </div>
             </div>
-            <div>
-              <label class="text-[11px] text-slate-500 font-semibold mb-1 block">Usulan Perbaikan / Rekomendasi (Opsional):</label>
-              <textarea id="modalImprovementSuggestion" rows="2" placeholder="Contoh: Disarankan penggantian baterai UPS / peremajaan kabel LAN / pengadaan unit cadangan..." class="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-sky-500"></textarea>
-            </div>
-            <button onclick="updateTicketStatus()" class="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold rounded-xl text-xs transition shadow-md">
-              Simpan Pembaharuan Status
-            </button>
           </div>
         </div>
 
@@ -1320,6 +1338,117 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL KELOLA BUTTON AKSI IT & TEMPLATE WA -->
+  <div id="actionButtonsManagerModal" class="hidden fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl sm:rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      <div class="p-4 sm:p-5 bg-gradient-to-r from-sky-700 to-teal-700 text-white flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-2">
+          <span class="text-lg">🎛️</span>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold">Kelola Button Aksi IT &amp; Template WA</h3>
+            <p class="text-[10px] text-sky-100">Perubahan tersimpan ke database untuk seluruh petugas IT (Web &amp; APK)</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeManageActionButtonsModal()" class="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-lg">✕</button>
+      </div>
+
+      <div class="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1 text-xs">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <h4 class="font-bold text-slate-800 uppercase tracking-wider text-[11px]">Daftar Button Aktif Saat Ini</h4>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="startNewActionButton()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-[11px] transition shadow-sm">
+              ➕ Tambah Button Baru
+            </button>
+            <button type="button" onclick="resetDefaultActionButtons()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold rounded-xl text-[11px] transition">
+              ↺ Reset Bawaan
+            </button>
+          </div>
+        </div>
+
+        <div id="actionButtonsManagerList" class="space-y-2"></div>
+
+        <form id="actionButtonForm" onsubmit="submitActionButtonForm(event)" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 id="abFormTitle" class="font-bold text-slate-800 text-xs">➕ Tambah Button Baru</h4>
+            <button type="button" onclick="startNewActionButton()" class="text-[11px] text-slate-500 hover:text-slate-800 font-semibold">Bersihkan Form</button>
+          </div>
+          <input type="hidden" id="abEditId" value="">
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Emoji / Ikon</label>
+              <input type="text" id="abEmoji" maxlength="6" value="💬" placeholder="🚀" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs text-center font-bold">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block font-bold text-slate-700 mb-1">Nama Button <span class="text-rose-500">*</span></label>
+              <input type="text" id="abLabel" required placeholder="Contoh: Tunggu Sparepart / OTW Lokasi" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Warna Button</label>
+              <select id="abColor" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold">
+                <option value="sky">Biru Muda (Sky)</option>
+                <option value="amber">Oranye / Kuning (Amber)</option>
+                <option value="indigo">Biru Tua (Indigo)</option>
+                <option value="purple">Ungu (Purple)</option>
+                <option value="emerald">Hijau Selesai (Emerald)</option>
+                <option value="rose">Merah (Rose)</option>
+                <option value="slate">Abu Gelap (Slate)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-1">Ubah Status Tiket Saat Diklik</label>
+              <select id="abTargetStatus" class="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-semibold">
+                <option value="">Hanya Kirim WA (Status Tetap / OTW)</option>
+                <option value="in_progress">Ubah Status → Sedang Diproses (in_progress)</option>
+                <option value="pending">Ubah Status → Pending / Tunggu Komponen</option>
+                <option value="resolved">Ubah Status → Selesai Diperbaiki (Kunci Tiket)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-4 pt-1">
+            <label class="inline-flex items-center space-x-2 text-xs text-slate-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="abRequireNotes" class="w-4 h-4 text-sky-600 rounded border-slate-300">
+              <span>Wajib isi Hasil Pengerjaan dulu</span>
+            </label>
+            <label class="inline-flex items-center space-x-2 text-xs text-slate-700 font-semibold cursor-pointer">
+              <input type="checkbox" id="abAttachPhoto" class="w-4 h-4 text-emerald-600 rounded border-slate-300">
+              <span>Ikutkan Foto Bukti di WA (APK v1.5)</span>
+            </label>
+          </div>
+
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-1 mb-1">
+              <label class="block font-bold text-slate-700">Template Pesan WhatsApp <span class="text-rose-500">*</span></label>
+              <span class="text-[10px] text-slate-400">Klik variabel di bawah untuk menyisipkan</span>
+            </div>
+            <div class="flex flex-wrap gap-1 mb-1.5">
+              <button type="button" onclick="insertActionPlaceholder('{pelapor}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{pelapor}</button>
+              <button type="button" onclick="insertActionPlaceholder('{ruangan}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{ruangan}</button>
+              <button type="button" onclick="insertActionPlaceholder('{tiket}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{tiket}</button>
+              <button type="button" onclick="insertActionPlaceholder('{teknisi}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{teknisi}</button>
+              <button type="button" onclick="insertActionPlaceholder('{keluhan}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{keluhan}</button>
+              <button type="button" onclick="insertActionPlaceholder('{hasil}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{hasil}</button>
+              <button type="button" onclick="insertActionPlaceholder('{usulan}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{usulan}</button>
+              <button type="button" onclick="insertActionPlaceholder('{link}')" class="px-2 py-0.5 bg-white hover:bg-sky-50 border border-slate-300 rounded text-[10px] font-mono font-bold text-sky-700">{link}</button>
+            </div>
+            <textarea id="abTemplate" rows="5" required placeholder="Halo {pelapor}, laporan di {ruangan} ({tiket}) sedang ditangani oleh {teknisi}..." class="w-full p-2.5 rounded-xl border border-slate-300 bg-white text-xs font-sans leading-relaxed focus:ring-2 focus:ring-sky-500"></textarea>
+          </div>
+
+          <div class="pt-2 flex justify-end gap-2">
+            <button type="button" onclick="closeManageActionButtonsModal()" class="px-4 py-2 border border-slate-300 bg-white rounded-xl text-slate-600 font-bold hover:bg-slate-100 transition">Tutup</button>
+            <button type="submit" id="abSubmitBtn" class="px-5 py-2 bg-gradient-to-r from-sky-600 to-teal-600 hover:from-sky-700 hover:to-teal-700 text-white font-bold rounded-xl transition shadow-md">
+              Simpan Button
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -1498,11 +1627,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.7"></script>
-  <script src="/js/bcrypt.min.js?v=4.7"></script>
-  <script src="/js/supabase-client.js?v=4.7"></script>
-  <script src="/js/sound.js?v=4.7"></script>
-  <script src="/js/app.js?v=4.7"></script>
+  <script src="/js/qrcode.min.js?v=4.8"></script>
+  <script src="/js/bcrypt.min.js?v=4.8"></script>
+  <script src="/js/supabase-client.js?v=4.8"></script>
+  <script src="/js/sound.js?v=4.8"></script>
+  <script src="/js/app.js?v=4.8"></script>
 </body>
 </html>
 
