@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.9">
+  <link rel="stylesheet" href="/css/custom.css?v=4.10">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -365,14 +365,14 @@
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div class="flex items-center space-x-2 flex-1">
-            <div class="relative flex-1 max-w-sm">
+        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
+          <div class="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            <div class="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-sm">
               <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
               <input type="text" id="filterSearch" oninput="debounceFilter()" placeholder="Cari nomor tiket, ruangan, keluhan..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-sky-500">
             </div>
 
-            <select id="filterPriority" onchange="loadTickets()" class="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-medium">
+            <select id="filterPriority" onchange="loadTickets()" class="flex-1 sm:flex-initial min-w-[130px] text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-medium">
               <option value="all">Semua Prioritas</option>
               <option value="critical">🚨 Kritis / Darurat</option>
               <option value="high">🔴 Tinggi</option>
@@ -384,7 +384,7 @@
               <option value="">Semua Ruangan RSUD</option>
             </select>
 
-            <select id="filterSort" onchange="renderTickets()" class="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-bold text-slate-700" title="Urutan tiket">
+            <select id="filterSort" onchange="renderTickets()" class="flex-1 sm:flex-initial min-w-[140px] text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-bold text-slate-700" title="Urutan tiket">
               <option value="newest">🕒 Terbaru (Tanggal)</option>
               <option value="oldest">📅 Terlama (Tanggal)</option>
               <option value="priority">🚨 Prioritas Tertinggi</option>
@@ -1112,11 +1112,15 @@
         </div>
 
         <!-- Ticket Meta -->
-        <div class="grid grid-cols-2 gap-3 text-xs bg-slate-50 p-4 rounded-2xl border border-slate-100">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 text-xs bg-slate-50 p-3.5 sm:p-4 rounded-2xl border border-slate-100">
           <div><span class="text-slate-400">Ruangan:</span> <strong id="modalRoom" class="block text-slate-800 text-sm"></strong></div>
           <div><span class="text-slate-400">Kategori:</span> <strong id="modalCategory" class="block text-slate-800 text-sm"></strong></div>
           <div><span class="text-slate-400">Pelapor:</span> <span id="modalReporter" class="block font-bold text-slate-700"></span></div>
           <div><span class="text-slate-400">Kontak WhatsApp:</span> <span id="modalPhone" class="block font-mono font-bold text-slate-700"></span></div>
+          <div class="sm:col-span-2 pt-1.5 border-t border-slate-200/70 flex flex-wrap items-center justify-between gap-1.5">
+            <span class="text-slate-400">Waktu Masuk Laporan:</span>
+            <span id="modalCreatedAt" class="ticket-date-chip">🕒 -</span>
+          </div>
         </div>
 
         <div>
@@ -1633,11 +1637,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.9"></script>
-  <script src="/js/bcrypt.min.js?v=4.9"></script>
-  <script src="/js/supabase-client.js?v=4.9"></script>
-  <script src="/js/sound.js?v=4.9"></script>
-  <script src="/js/app.js?v=4.9"></script>
+  <script src="/js/qrcode.min.js?v=4.10"></script>
+  <script src="/js/bcrypt.min.js?v=4.10"></script>
+  <script src="/js/supabase-client.js?v=4.10"></script>
+  <script src="/js/sound.js?v=4.10"></script>
+  <script src="/js/app.js?v=4.10"></script>
 </body>
 </html>
 

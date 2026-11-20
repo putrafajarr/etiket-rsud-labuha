@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.9';
+const APP_WEB_VERSION = '4.10';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -1348,6 +1348,16 @@ function getFilteredTickets(list) {
   });
 }
 
+function formatTicketCreatedDateTime(iso) {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) {
+    return { dateFormatted: '-', timeFormatted: '-', fullText: '-' };
+  }
+  const dateFormatted = d.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timeFormatted = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  return { dateFormatted, timeFormatted, fullText: `${dateFormatted} • ${timeFormatted} WIT` };
+}
+
 // Render Kanban, Desktop Table & Mobile Cards
 function renderTickets() {
   const openList = document.getElementById('colOpenList');
@@ -1430,13 +1440,7 @@ function renderTickets() {
       closed: '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">✓ Ditutup</span>'
     }[t.status] || `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 whitespace-nowrap">${esc(t.status)}</span>`;
 
-    const createdDate = new Date(t.created_at);
-    const dateFormatted = !isNaN(createdDate)
-      ? createdDate.toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      : '-';
-    const timeFormatted = !isNaN(createdDate)
-      ? createdDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-      : '-';
+    const { dateFormatted, timeFormatted, fullText: createdFullText } = formatTicketCreatedDateTime(t.created_at);
 
     let techBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">⏳ Belum Ditugaskan</span>';
     if (t.assigned_to) {
@@ -1452,28 +1456,31 @@ function renderTickets() {
       (hasPhoto ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 text-[9px] font-bold">📷 Foto</span>' : '') +
       (hasProof ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[9px] font-bold">✅ Bukti</span>' : '');
 
-    // Card element for Kanban
+    // Card element for Kanban (Responsive across APK & Desktop)
     const card = document.createElement('div');
-    card.className = `p-3.5 rounded-xl border bg-white shadow-sm hover:shadow-md transition cursor-pointer space-y-2.5 ${priorityClasses}`;
+    card.className = `p-3.5 rounded-xl border bg-white shadow-sm hover:shadow-md transition cursor-pointer space-y-2 ${priorityClasses}`;
     card.onclick = () => openTicketModal(t.id);
     card.innerHTML = `
-      <div class="flex items-center justify-between gap-1.5">
-        <div class="flex items-center gap-1.5 min-w-0">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex items-center gap-1.5 min-w-0 flex-wrap">
           <span class="font-mono font-bold text-xs text-sky-700 truncate">${safeTicketNo}</span>
           ${attachmentChips}
         </div>
-        ${priorityBadge}
+        <div class="shrink-0">${priorityBadge}</div>
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="ticket-date-chip">🕒 ${createdFullText}</span>
       </div>
       <div>
         <h4 class="font-bold text-slate-800 text-xs line-clamp-2 leading-snug">${safeTitle}</h4>
-        <p class="text-[11px] text-slate-500 font-semibold mt-1 flex items-center">
+        <p class="text-[11px] text-slate-500 font-semibold mt-1 flex items-center min-w-0">
           <i data-lucide="map-pin" class="w-3 h-3 mr-1 text-slate-400 shrink-0"></i>
           <span class="truncate">${safeRoom}</span>
         </p>
       </div>
-      <div class="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-        <span class="truncate max-w-[110px]">👤 ${safeReporter}</span>
-        <div>${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + esc(t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
+      <div class="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-1.5 text-[10px] text-slate-500">
+        <span class="truncate max-w-[135px]">👤 ${safeReporter}</span>
+        <div class="shrink-0">${t.assigned_to ? (activeUser && (t.assigned_to === activeUser.id || t.assigned_to_name === activeUser.name) ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">👤 Anda</span>' : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">🔒 ' + esc(t.assigned_to_name ? t.assigned_to_name.split(' ')[0] : 'Teknisi') + '</span>') : '<span class="text-rose-500 font-bold text-[10px]">⏳ Belum ada</span>'}</div>
       </div>
     `;
 
@@ -1534,10 +1541,9 @@ function renderTickets() {
       mCard.className = `p-3.5 sm:p-4 bg-white hover:bg-sky-50/40 transition cursor-pointer space-y-2.5 active:bg-slate-50 border-b border-slate-100 ${mobileBorderAccent}`;
       mCard.onclick = () => openTicketModal(t.id);
       mCard.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center flex-wrap gap-1.5 min-w-0">
             <span class="font-mono font-bold text-sky-700 text-xs">${safeTicketNo}</span>
-            <span class="text-[10px] text-slate-400 font-medium">${dateFormatted} • ${timeFormatted} WIT</span>
             ${attachmentChips}
           </div>
           <div class="shrink-0">
@@ -1545,14 +1551,16 @@ function renderTickets() {
           </div>
         </div>
 
-        <div class="flex items-center justify-between gap-2">
-          <div class="font-bold text-slate-800 text-sm flex items-center space-x-1.5 min-w-0">
-            <span class="text-base shrink-0">🏥</span>
-            <span class="truncate">${safeRoom}</span>
-          </div>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="ticket-date-chip">🕒 ${createdFullText}</span>
           <div class="shrink-0">
             ${priorityBadge}
           </div>
+        </div>
+
+        <div class="flex items-center space-x-1.5 min-w-0 font-bold text-slate-800 text-sm">
+          <span class="text-base shrink-0">🏥</span>
+          <span class="truncate">${safeRoom}</span>
         </div>
 
         <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs text-slate-700 font-medium leading-relaxed">
@@ -2540,6 +2548,11 @@ async function openTicketModal(ticketId) {
     document.getElementById('modalCategory').textContent = selectedTicketForModal.category_name;
     document.getElementById('modalReporter').textContent = selectedTicketForModal.reporter_name;
     document.getElementById('modalPhone').textContent = selectedTicketForModal.reporter_phone;
+    const modalCreatedAtEl = document.getElementById('modalCreatedAt');
+    if (modalCreatedAtEl) {
+      const { fullText } = formatTicketCreatedDateTime(selectedTicketForModal.created_at);
+      modalCreatedAtEl.textContent = `🕒 ${fullText}`;
+    }
     document.getElementById('modalTitle').textContent = selectedTicketForModal.title;
     document.getElementById('modalDesc').textContent = selectedTicketForModal.description;
 
@@ -3496,21 +3509,25 @@ function loadTechnicianTickets() {
 
   myTickets.forEach(t => {
     const card = document.createElement('div');
-    card.className = 'bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3';
+    card.className = 'bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3';
+    const { fullText: techDateText } = formatTicketCreatedDateTime(t.created_at);
     const quickButtonsHtml = actionButtons.slice(0, 3).map(btn => {
       const cls = ACTION_BTN_COLOR_MAP[btn.color] || ACTION_BTN_COLOR_MAP.sky;
       return `<button type="button" onclick="executeItActionByTicketId(${t.id}, '${esc(btn.id)}')" class="px-3 py-2 ${cls} rounded-xl text-xs font-bold transition flex items-center space-x-1 shadow-sm"><span>${esc(btn.emoji || '💬')}</span><span>${esc(btn.label)}</span></button>`;
     }).join('');
 
     card.innerHTML = `
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="font-mono font-bold text-xs text-sky-700">${esc(t.ticket_no)}</span>
-        <div class="flex items-center gap-1.5">
+        <div class="flex flex-wrap items-center gap-1.5">
           <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">${esc(statusLabels[t.status] || t.status)}</span>
           <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${t.priority === 'critical' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}">
             ${esc(t.priority)}
           </span>
         </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5">
+        <span class="ticket-date-chip">🕒 ${techDateText}</span>
       </div>
       <div>
         <h3 class="font-bold text-slate-800 text-sm">${esc(t.title)}</h3>
@@ -4391,7 +4408,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.9');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.10');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');

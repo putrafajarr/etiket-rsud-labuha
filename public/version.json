@@ -1,7 +1,7 @@
 {
-  "version": "4.9",
-  "releasedAt": "2026-11-20T12:55:00+09:00",
-  "notes": "Urutan tiket terbaru berdasarkan tanggal, perbaikan klik gambar tidak blank putih, lampirkan foto otomatis saat klik Selesai di APK v1.6 & Share/Clipboard di Web.",
+  "version": "4.10",
+  "releasedAt": "2026-11-21T08:40:00+09:00",
+  "notes": "Tampilan tanggal & jam lapor pada card Kanban, Kartu HP, Mode Teknisi, Modal Detail, dan Filter Kalender dibuat lebih responsif di layar HP Android.",
   "minApkVersion": "1.6",
   "apkVersion": "1.6",
   "apkVersionCode": 7,

@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.9');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.10');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.9').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.10').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
