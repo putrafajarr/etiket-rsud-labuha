@@ -2,6 +2,7 @@ package id.rsudlabuha.etiket;
 
 import android.Manifest;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -338,17 +339,20 @@ public class EtiketNativePlugin extends Plugin {
             String digits = phone != null ? phone.replaceAll("\\D+", "") : "";
             if (digits.startsWith("0")) {
                 digits = "62" + digits.substring(1);
+            } else if (digits.startsWith("8") && digits.length() >= 8) {
+                digits = "62" + digits;
             }
             final String cleanPhone = digits;
-            final String safeMime = (mimeType != null && !mimeType.isEmpty()) ? mimeType : "image/*";
+            final String safeMime = (mimeType != null && mimeType.startsWith("image/")) ? mimeType : "image/*";
             final String finalMsg = message != null ? message : "";
 
             getActivity().runOnUiThread(() -> {
                 Intent intent = new Intent(Intent.ACTION_SEND);
-                intent.setType(safeMime);
+                intent.setType("image/*");
                 intent.putExtra(Intent.EXTRA_STREAM, uri);
                 intent.putExtra(Intent.EXTRA_TEXT, finalMsg);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setClipData(ClipData.newRawUri("Lampiran Bukti", uri));
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
                 if (cleanPhone.length() >= 8) {
                     intent.putExtra("jid", cleanPhone + "@s.whatsapp.net");
                 }
@@ -359,18 +363,40 @@ public class EtiketNativePlugin extends Plugin {
                 for (String pkg : candidates) {
                     try {
                         pm.getPackageInfo(pkg, 0);
+                        getContext().grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         Intent pkgIntent = new Intent(intent);
                         pkgIntent.setPackage(pkg);
                         getActivity().startActivity(pkgIntent);
                         launchedPkg = pkg;
                         break;
                     } catch (PackageManager.NameNotFoundException | ActivityNotFoundException ignored) {
+                    } catch (Exception ex) {
+                        // Retry same package cleanly without undocumented jid extra if OEM/WA rejects it
+                        try {
+                            Intent fallbackPkgIntent = new Intent(Intent.ACTION_SEND);
+                            fallbackPkgIntent.setType(safeMime);
+                            fallbackPkgIntent.putExtra(Intent.EXTRA_STREAM, uri);
+                            fallbackPkgIntent.putExtra(Intent.EXTRA_TEXT, finalMsg);
+                            fallbackPkgIntent.setClipData(ClipData.newRawUri("Lampiran Bukti", uri));
+                            fallbackPkgIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                            fallbackPkgIntent.setPackage(pkg);
+                            getActivity().startActivity(fallbackPkgIntent);
+                            launchedPkg = pkg;
+                            break;
+                        } catch (Exception ignored2) {
+                        }
                     }
                 }
 
                 if (launchedPkg == null) {
-                    Intent chooser = Intent.createChooser(intent, "Kirim Foto & Penjelasan via WhatsApp");
-                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent chooserBase = new Intent(Intent.ACTION_SEND);
+                    chooserBase.setType("image/*");
+                    chooserBase.putExtra(Intent.EXTRA_STREAM, uri);
+                    chooserBase.putExtra(Intent.EXTRA_TEXT, finalMsg);
+                    chooserBase.setClipData(ClipData.newRawUri("Lampiran Bukti", uri));
+                    chooserBase.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    Intent chooser = Intent.createChooser(chooserBase, "Kirim Foto & Penjelasan via WhatsApp");
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
                     getActivity().startActivity(chooser);
                     launchedPkg = "chooser";
                 }

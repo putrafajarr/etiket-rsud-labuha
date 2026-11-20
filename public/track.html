@@ -132,15 +132,15 @@
 
         <!-- Foto Kendala & Bukti Perbaikan -->
         <div id="photosSection" class="hidden space-y-3">
-          <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Foto Terlampir</span>
+          <span class="text-xs font-bold text-slate-700 uppercase tracking-wider block">Foto Terlampir <span class="font-normal text-slate-400 normal-case">(ketuk foto untuk memperbesar)</span></span>
           <div class="grid grid-cols-2 gap-3">
             <div id="issuePhotoContainer" class="hidden">
               <span class="text-[11px] text-slate-500 block mb-1">Foto Kendala Awal:</span>
-              <img id="issuePhoto" src="" class="rounded-xl border h-36 w-full object-cover shadow-sm cursor-pointer" onclick="window.open(this.src)">
+              <img id="issuePhoto" src="" alt="Foto Kendala Awal" class="rounded-xl border h-36 w-full object-cover shadow-sm cursor-zoom-in hover:opacity-95 transition" onclick="openTrackPhotoPreview(this.src, 'Foto Kendala Awal')">
             </div>
             <div id="proofPhotoContainer" class="hidden">
               <span class="text-[11px] text-emerald-700 font-semibold block mb-1">Bukti Selesai Diperbaiki:</span>
-              <img id="proofPhoto" src="" class="rounded-xl border border-emerald-200 h-36 w-full object-cover shadow-sm cursor-pointer" onclick="window.open(this.src)">
+              <img id="proofPhoto" src="" alt="Bukti Selesai Diperbaiki" class="rounded-xl border border-emerald-200 h-36 w-full object-cover shadow-sm cursor-zoom-in hover:opacity-95 transition" onclick="openTrackPhotoPreview(this.src, 'Foto Bukti Selesai Diperbaiki')">
             </div>
           </div>
         </div>
@@ -183,7 +183,23 @@
     </div>
   </main>
 
-  <script src="/js/supabase-client.js?v=4.8"></script>
+  <!-- Safe Lightbox Modal (prevents blank screen on data URL click) -->
+  <div id="trackPhotoModal" class="hidden fixed inset-0 bg-slate-900/85 backdrop-blur-sm z-50 flex items-center justify-center p-4" onclick="closeTrackPhotoPreview()">
+    <div class="bg-white rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200" onclick="event.stopPropagation()">
+      <div class="px-4 py-3 bg-slate-900 text-white flex items-center justify-between gap-2">
+        <span id="trackPhotoCaption" class="text-xs sm:text-sm font-bold truncate">Pratinjau Foto</span>
+        <div class="flex items-center gap-2 shrink-0">
+          <button type="button" onclick="downloadTrackPhoto()" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition">Simpan Foto</button>
+          <button type="button" onclick="closeTrackPhotoPreview()" class="w-7 h-7 rounded-full bg-white/15 hover:bg-white/30 text-white font-bold text-sm flex items-center justify-center">✕</button>
+        </div>
+      </div>
+      <div class="p-3 bg-slate-100 flex items-center justify-center max-h-[80vh] overflow-auto">
+        <img id="trackPhotoLarge" src="" alt="Foto" class="max-w-full max-h-[75vh] object-contain rounded-lg shadow">
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/supabase-client.js?v=4.9"></script>
   <script>
     let currentTicket = null;
     let selectedRating = 0;
@@ -382,6 +398,40 @@
         await searchTicket();
       } catch (err) {
         Swal.fire('Error', err.message, 'error');
+      }
+    }
+
+    function openTrackPhotoPreview(src, caption) {
+      if (!src) return;
+      const modal = document.getElementById('trackPhotoModal');
+      const img = document.getElementById('trackPhotoLarge');
+      const cap = document.getElementById('trackPhotoCaption');
+      if (img) img.src = src;
+      if (cap) cap.textContent = caption || 'Pratinjau Foto';
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeTrackPhotoPreview() {
+      const modal = document.getElementById('trackPhotoModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function downloadTrackPhoto() {
+      const src = document.getElementById('trackPhotoLarge')?.src || '';
+      if (!src) return;
+      try {
+        const res = await fetch(src);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Foto-${(currentTicket && currentTicket.ticket_no) || 'etiket'}.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (e) {
+        Swal.fire('Info', 'Tekan dan tahan pada gambar untuk menyimpan ke HP Anda.', 'info');
       }
     }
   </script>

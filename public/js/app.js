@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.8';
+const APP_WEB_VERSION = '4.9';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -172,7 +172,7 @@ function showApkMandatoryBanner(info) {
   const notes = document.getElementById('apkForceBannerNotes');
   if (!banner) return;
   if (txt) {
-    txt.textContent = `Pembaruan Wajib APK v${info.apkVersion || info.minApkVersion || '1.5'} Tersedia!`;
+    txt.textContent = `Pembaruan Wajib APK v${info.apkVersion || info.minApkVersion || '1.6'} Tersedia!`;
   }
   if (notes) {
     notes.textContent = info.apkNotes || info.notes || 'Wajib update APK di masing-masing HP tanpa hapus aplikasi lama.';
@@ -214,7 +214,7 @@ async function triggerApkUpdateDownload(useFallback = false) {
 }
 
 async function promptMandatoryApkUpdate(info, apkState) {
-  const targetVer = esc(info.apkVersion || info.minApkVersion || '1.5');
+  const targetVer = esc(info.apkVersion || info.minApkVersion || '1.6');
   const currentVer = esc(apkState?.versionName || '1.4');
   const noteText = esc(info.apkNotes || info.notes || 'Pembaruan ini menambahkan kirim foto bukti + keterangan lengkap + nomor WA otomatis dalam 1 klik.');
 
@@ -1316,8 +1316,9 @@ function getFilteredTickets(list) {
   const search = (document.getElementById('filterSearch')?.value || '').trim().toLowerCase();
   const priority = document.getElementById('filterPriority')?.value || 'all';
   const roomId = document.getElementById('filterRoom')?.value || '';
+  const sortBy = document.getElementById('filterSort')?.value || 'newest';
 
-  return (list || []).filter(t => {
+  const filtered = (list || []).filter(t => {
     if (priority && priority !== 'all' && t.priority !== priority) return false;
     if (roomId && String(t.room_id) !== String(roomId)) return false;
     if (search) {
@@ -1327,6 +1328,23 @@ function getFilteredTickets(list) {
       if (!hay.includes(search)) return false;
     }
     return true;
+  });
+
+  const priorityWeights = { critical: 1, high: 2, medium: 3, low: 4 };
+  return filtered.sort((a, b) => {
+    if (sortBy === 'priority') {
+      const wa = priorityWeights[a.priority] || 4;
+      const wb = priorityWeights[b.priority] || 4;
+      if (wa !== wb) return wa - wb;
+    }
+    const ta = new Date(a.created_at || 0).getTime() || 0;
+    const tb = new Date(b.created_at || 0).getTime() || 0;
+    if (sortBy === 'oldest') {
+      if (ta !== tb) return ta - tb;
+      return Number(a.id || 0) - Number(b.id || 0);
+    }
+    if (tb !== ta) return tb - ta;
+    return Number(b.id || 0) - Number(a.id || 0);
   });
 }
 
@@ -2632,16 +2650,40 @@ function renderModalLogsList(logs) {
   });
 }
 
-function openImageLightbox(src, caption) {
+async function openImageLightbox(src, caption) {
   if (!src) return;
-  Swal.fire({
+  const res = await Swal.fire({
     title: caption || 'Lampiran Foto',
     imageUrl: src,
     imageAlt: caption || 'Lampiran Foto',
-    width: 640,
+    width: 680,
+    showDenyButton: true,
     confirmButtonText: 'Tutup',
-    confirmButtonColor: '#0284c7'
+    denyButtonText: '⬇️ Simpan Foto',
+    confirmButtonColor: '#0284c7',
+    denyButtonColor: '#059669'
   });
+  if (res.isDenied) {
+    try {
+      const resp = await fetch(src);
+      const blob = await resp.blob();
+      const filename = `Foto-${(selectedTicketForModal && selectedTicketForModal.ticket_no) || 'etiket'}.jpg`;
+      if (typeof window.downloadQrPng === 'function' && String(src).startsWith('data:image/')) {
+        await window.downloadQrPng(src, filename);
+      } else {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+      }
+    } catch (e) {
+      Swal.fire('Info', 'Gambar gagal diunduh otomatis.', 'info');
+    }
+  }
 }
 
 function closeModal() {
@@ -3002,13 +3044,22 @@ async function executeItActionOnTicket(ticket, btn, opts = {}) {
   let cleanPhone = String(ticket.reporter_phone || '').replace(/\D/g, '');
   if (cleanPhone.startsWith('0')) {
     cleanPhone = '62' + cleanPhone.substring(1);
+  } else if (cleanPhone.startsWith('8') && cleanPhone.length >= 8) {
+    cleanPhone = '62' + cleanPhone;
+  } else if (cleanPhone.startsWith('8') && cleanPhone.length >= 8) {
+    cleanPhone = '62' + cleanPhone;
   }
   const hasPhone = cleanPhone.length >= 6;
   const waUrl = hasPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}` : '';
   const nativePlugin = window.Capacitor?.Plugins?.EtiketNative;
 
-  // Dispatch WA cleanly: native photo intent on APK v1.5+ when attachPhoto is enabled, otherwise synchronous window.open
+  // Dispatch WA cleanly:
+  // - Android APK v1.5+: native shareToWhatsApp (photo + text + jid)
+  // - Android APK <=v1.4: native exportBase64File chooser + clipboard
+  // - Mobile Web Browser: navigator.share(files + text) if available
+  // - Desktop Web Browser: synchronous window.open(waUrl) + copy PNG image to clipboard
   let waDispatched = false;
+  let webImageCopied = false;
   if (hasPhone) {
     if (btn.attachPhoto && hasPhoto && nativePlugin && typeof nativePlugin.shareToWhatsApp === 'function') {
       const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
@@ -3054,9 +3105,39 @@ async function executeItActionOnTicket(ticket, btn, opts = {}) {
         window.open(waUrl, '_blank');
         waDispatched = true;
       }
+    } else if (btn.attachPhoto && hasPhoto && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '') && typeof navigator.canShare === 'function') {
+      const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
+      if (imgDataUrl && imgDataUrl.startsWith('data:image/')) {
+        try {
+          const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
+          const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+          const ext = mimeType.includes('png') ? 'png' : 'jpg';
+          const blob = await (await fetch(imgDataUrl)).blob();
+          const shareFile = new File([blob], `Bukti-${ticket.ticket_no || ticket.id}.${ext}`, { type: mimeType });
+          if (navigator.canShare({ files: [shareFile] })) {
+            await copyTextSafe(message);
+            await navigator.share({ files: [shareFile], text: message, title: `Bukti ${ticket.ticket_no || ''}` });
+            waDispatched = true;
+          }
+        } catch (shareErr) {
+          if (shareErr && shareErr.name === 'AbortError') {
+            // Fall through cleanly if user backed out of share sheet
+          }
+        }
+      }
+      if (!waDispatched) {
+        window.open(waUrl, '_blank');
+        waDispatched = true;
+      }
     } else {
       window.open(waUrl, '_blank');
       waDispatched = true;
+      if (btn.attachPhoto && hasPhoto) {
+        const imgDataUrl = await resolveImageDataUrlForShare(ticket, selectedProofFile);
+        if (imgDataUrl && imgDataUrl.startsWith('data:image/')) {
+          webImageCopied = await copyImageDataUrlToClipboard(imgDataUrl);
+        }
+      }
     }
   }
 
@@ -3115,9 +3196,11 @@ async function executeItActionOnTicket(ticket, btn, opts = {}) {
         position: 'top-end',
         icon: 'success',
         title: `✅ Tiket Selesai & Dikunci!`,
-        text: `${ticket.ticket_no} (${ticket.room_name}) telah dikabarkan ke pelapor via WA`,
+        text: webImageCopied
+          ? `${ticket.ticket_no}: WA dibuka & foto disalin ke Clipboard (tekan Ctrl+V di chat WA Web jika ingin menempel gambar).`
+          : `${ticket.ticket_no} (${ticket.room_name}) telah dikabarkan ke pelapor via WA`,
         showConfirmButton: false,
-        timer: 4500,
+        timer: webImageCopied ? 6000 : 4500,
         timerProgressBar: true
       });
     } else {
@@ -3691,6 +3774,29 @@ async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
   await saveTicketDraftBeforeWa(ticket, liveNotes, liveSuggestion, selectedProofFile);
   await recordTicketWaSent(ticket.id, type, message);
   return true;
+}
+
+async function copyImageDataUrlToClipboard(imgDataUrl) {
+  if (!imgDataUrl || !navigator.clipboard || typeof ClipboardItem === 'undefined') return false;
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = imgDataUrl;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width || 1;
+    canvas.height = img.naturalHeight || img.height || 1;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const pngBlob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    if (!pngBlob) return false;
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function copyTextSafe(text) {
@@ -4285,7 +4391,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.8');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.9');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');

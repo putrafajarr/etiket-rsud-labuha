@@ -1,12 +1,12 @@
 {
-  "version": "4.8",
-  "releasedAt": "2026-11-20T09:40:00+09:00",
-  "notes": "Alur baru teknisi IT: Ambil Tiket Dulu -> OTW Lokasi (WA), Sedang Diproses (WA + ubah status otomatis), Selesai (WA + kunci otomatis), serta fitur Edit & Tambah Button Aksi.",
-  "minApkVersion": "1.5",
-  "apkVersion": "1.5",
-  "apkVersionCode": 6,
+  "version": "4.9",
+  "releasedAt": "2026-11-20T12:55:00+09:00",
+  "notes": "Urutan tiket terbaru berdasarkan tanggal, perbaikan klik gambar tidak blank putih, lampirkan foto otomatis saat klik Selesai di APK v1.6 & Share/Clipboard di Web.",
+  "minApkVersion": "1.6",
+  "apkVersion": "1.6",
+  "apkVersionCode": 7,
   "forceApkUpdate": true,
   "apkUrl": "https://raw.githubusercontent.com/putrafajarr/etiket-rsud-labuha/main/public/downloads/ETIKET-RSUD-LABUHA.apk",
   "apkFallbackUrl": "https://etiket-rsud-labuha.etiket-itrsudlabuha.workers.dev/downloads/ETIKET-RSUD-LABUHA.apk",
-  "apkNotes": "APK v1.5 wajib di-update oleh seluruh petugas IT agar foto bukti pengerjaan + penjelasan lengkap + nomor pelapor langsung terbuka otomatis ke WhatsApp tanpa perlu Paste manual."
+  "apkNotes": "APK v1.6 memperbaiki izin baca foto (ClipData/FileProvider) agar gambar bukti + keterangan otomatis menempel ke WhatsApp saat klik Selesai."
 }

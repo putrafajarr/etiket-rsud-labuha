@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.8');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.9');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.8').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.9').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -301,13 +301,12 @@
     return { fields, files };
   }
 
-  function sortTicketsPriority(tickets) {
-    const weights = { critical: 1, high: 2, medium: 3, low: 4 };
+  function sortTicketsDateDesc(tickets) {
     return (tickets || []).slice().sort((a, b) => {
-      const wa = weights[a.priority] || 4;
-      const wb = weights[b.priority] || 4;
-      if (wa !== wb) return wa - wb;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at || 0).getTime() || 0;
+      const ta = new Date(a.created_at || 0).getTime() || 0;
+      if (tb !== ta) return tb - ta;
+      return Number(b.id || 0) - Number(a.id || 0);
     });
   }
 
@@ -454,7 +453,7 @@
       );
     }
 
-    return jsonResponse(sortTicketsPriority(rows), 200);
+    return jsonResponse(sortTicketsDateDesc(rows), 200);
   }
 
   async function handleLatestAlert(queryString) {
