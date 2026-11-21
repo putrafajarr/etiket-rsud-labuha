@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.10';
+const APP_WEB_VERSION = '4.11';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -889,7 +889,8 @@ async function runRealtimeSyncCycle() {
 
           renderTickets();
           loadStats();
-          if (currentTab === 'technician') loadTechnicianTickets();
+          loadTechnicianTickets();
+          if (currentTab === 'reports') loadTechnicians();
 
           // Refresh modal live jika sedang dibuka
           if (selectedTicketForModal) {
@@ -984,44 +985,40 @@ async function runRealtimeSyncCycle() {
     }
 
     // -------------------------------------------------------------------------
-    // 3. SINKRONISASI PETUGAS IT REAL-TIME (Tambah, Edit, Ganti Role)
+    // 3. SINKRONISASI PETUGAS IT REAL-TIME (Tambah, Edit, Ganti Role, Beban Tiket)
     // -------------------------------------------------------------------------
     const techRes = await smartFetch('/api/users/technicians');
     if (techRes && techRes.ok) {
       const freshTechs = await techRes.json();
       if (Array.isArray(freshTechs)) {
-        const freshTechsSig = freshTechs.map(u => `${u.id}:${u.name}:${u.role}:${u.username}`).join('|');
+        const freshTechsSig = freshTechs.map(u => `${u.id}:${u.name}:${u.role}:${u.username}:${u.active_tickets || 0}:${u.resolved_tickets || 0}:${u.is_active ?? 1}`).join('|');
+        const profileSig = freshTechs.map(u => `${u.id}:${u.name}:${u.role}:${u.username}:${u.is_active ?? 1}`).join('|');
         if (!isInitialTechsRan) {
           lastTechsSignature = freshTechsSig;
+          window._lastTechProfileSig = profileSig;
           knownTechIds = new Set(freshTechs.map(u => u.id));
           allTechnicians = freshTechs;
+          renderTechniciansViews();
           isInitialTechsRan = true;
         } else if (freshTechsSig !== lastTechsSignature) {
-          Swal.fire({
-            toast: true,
-            position: 'top-end',
-            icon: 'info',
-            title: '👤 Data Petugas IT Diperbarui',
-            text: 'Perubahan akun petugas IT di Supabase telah disinkronkan',
-            showConfirmButton: false,
-            timer: 3500
-          });
+          if (window._lastTechProfileSig && profileSig !== window._lastTechProfileSig) {
+            Swal.fire({
+              toast: true,
+              position: 'top-end',
+              icon: 'info',
+              title: '👤 Data Petugas IT Diperbarui',
+              text: 'Perubahan akun petugas IT di Supabase telah disinkronkan',
+              showConfirmButton: false,
+              timer: 3500
+            });
+          }
 
           allTechnicians = freshTechs;
           lastTechsSignature = freshTechsSig;
+          window._lastTechProfileSig = profileSig;
           knownTechIds = new Set(freshTechs.map(u => u.id));
+          renderTechniciansViews();
 
-          // Re-populate modal technician select
-          const select = document.getElementById('modalAssignTech');
-          if (select) {
-            const curVal = select.value;
-            select.innerHTML = '<option value="">-- Pilih Petugas / Teknisi IT --</option>';
-            allTechnicians.forEach(t => {
-              const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
-              const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
-              select.innerHTML += `<option value="${t.id}" ${t.id == curVal ? 'selected' : ''}>${esc(t.name)} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
-            });
-          }
           if (currentTab === 'users') loadUsers();
         }
       }
@@ -1196,18 +1193,21 @@ function switchTab(tab) {
   if (tab === 'tickets') {
     loadTickets();
     loadStats();
+    if (!allTechnicians || allTechnicians.length === 0) loadTechnicians();
   } else if (tab === 'rooms') {
     loadRoomsMaster();
   } else if (tab === 'reports') {
     updateSignersPreview();
     loadAppSettings();
+    loadTechnicians();
     loadReportsData();
   } else if (tab === 'gateway') {
     loadGatewaySettings();
   } else if (tab === 'logs') {
     loadNotificationLogs();
   } else if (tab === 'technician') {
-    loadTechnicianTickets();
+    if (!allTickets || allTickets.length === 0) loadTickets();
+    else loadTechnicianTickets();
   } else if (tab === 'users') {
     loadUsers();
   }
@@ -1303,10 +1303,11 @@ async function loadTickets() {
   try {
     const res = await fetch('/api/tickets');
     const rows = await res.json();
-    if (Array.isArray(rows)) {
+    if (res.ok && Array.isArray(rows)) {
       allTickets = rows;
     }
     renderTickets();
+    loadTechnicianTickets();
   } catch (err) {
     console.error('Failed to load tickets:', err);
   }
@@ -1974,14 +1975,19 @@ async function deleteRoom(roomId, roomName) {
 let allUsersData = [];
 
 async function loadUsers() {
+  const tbody = document.getElementById('usersTableBody');
   try {
     const res = await fetch('/api/users');
-    allUsersData = await res.json();
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) {
+      throw new Error((data && data.error) || 'Gagal mengambil daftar pengguna');
+    }
+    allUsersData = data;
 
-    const tbody = document.getElementById('usersTableBody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
-    if (!allUsersData || allUsersData.length === 0) {
+    if (allUsersData.length === 0) {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" class="p-8 text-center text-slate-400 text-xs">
@@ -2032,6 +2038,16 @@ async function loadUsers() {
     lucide.createIcons();
   } catch (err) {
     console.error('Failed to load users:', err);
+    if (tbody && (!allUsersData || allUsersData.length === 0)) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="p-6 text-center text-rose-500 text-xs">
+            Gagal memuat data akun IT: ${esc(err.message || 'Cek koneksi internet')}.
+            <button type="button" onclick="loadUsers()" class="ml-2 px-2.5 py-1 bg-sky-600 text-white rounded-lg font-bold">Muat Ulang</button>
+          </td>
+        </tr>
+      `;
+    }
   }
 }
 
@@ -2242,48 +2258,66 @@ async function previewRoomQR(roomId) {
   }
 }
 
+function renderTechniciansViews() {
+  const select = document.getElementById('modalAssignTech');
+  if (select) {
+    const curVal = select.value;
+    select.innerHTML = '<option value="">-- Pilih Petugas / Teknisi IT --</option>';
+    (allTechnicians || []).forEach(t => {
+      const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
+      const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
+      select.innerHTML += `<option value="${t.id}" ${String(t.id) === String(curVal) ? 'selected' : ''}>${esc(t.name)} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
+    });
+  }
+
+  const tbody = document.getElementById('techLeaderboardBody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    if (!allTechnicians || allTechnicians.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="p-6 text-center text-slate-400 text-xs">Belum ada data teknisi IT aktif.</td>
+        </tr>
+      `;
+    } else {
+      allTechnicians.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.className = 'even:bg-slate-50/40 whitespace-nowrap hover:bg-sky-50/50 transition';
+        tr.innerHTML = `
+          <td class="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap align-middle">${esc(t.name)} <span class="text-[10px] text-slate-400 font-mono">(@${esc(t.username)})</span></td>
+          <td class="px-3.5 py-3 text-slate-500 whitespace-nowrap align-middle">${esc(t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT'))}</td>
+          <td class="px-3.5 py-3 font-bold text-amber-600 whitespace-nowrap align-middle">${Number(t.active_tickets) || 0} Tiket</td>
+          <td class="px-3.5 py-3 font-bold text-emerald-600 whitespace-nowrap align-middle">${Number(t.resolved_tickets) || 0} Tiket Selesai</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+}
+
 // Load Technicians
 async function loadTechnicians() {
   try {
     const res = await fetch('/api/users/technicians');
-    allTechnicians = await res.json();
-
-    const select = document.getElementById('modalAssignTech');
-    if (select) {
-      select.innerHTML = '<option value="">-- Pilih Petugas / Teknisi IT --</option>';
-      allTechnicians.forEach(t => {
-        const roleLabel = (t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator IT' : 'Teknisi IT';
-        const isSelf = activeUser && (activeUser.id === t.id || activeUser.username === t.username) ? ' [Akun Anda]' : '';
-        select.innerHTML += `<option value="${t.id}">${esc(t.name)} (${roleLabel})${isSelf} - ${t.active_tickets || 0} aktif</option>`;
-      });
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) {
+      throw new Error((data && data.error) || 'Gagal memuat daftar teknisi');
     }
-
-    // Populate Leaderboard in Reports
-    const tbody = document.getElementById('techLeaderboardBody');
-    if (tbody) {
-      tbody.innerHTML = '';
-      if (!allTechnicians || allTechnicians.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="4" class="p-6 text-center text-slate-400 text-xs">Belum ada data teknisi IT aktif.</td>
-          </tr>
-        `;
-      } else {
-        allTechnicians.forEach(t => {
-          const tr = document.createElement('tr');
-          tr.className = 'even:bg-slate-50/40 whitespace-nowrap hover:bg-sky-50/50 transition';
-          tr.innerHTML = `
-            <td class="px-3.5 py-3 font-bold text-slate-800 whitespace-nowrap align-middle">${esc(t.name)} <span class="text-[10px] text-slate-400 font-mono">(@${esc(t.username)})</span></td>
-            <td class="px-3.5 py-3 text-slate-500 whitespace-nowrap align-middle">${esc(t.specialization || ((t.role === 'koordinator' || t.role === 'kepala_it' || t.role === 'superadmin') ? 'Koordinator SIMRS' : 'Teknisi IT'))}</td>
-            <td class="px-3.5 py-3 font-bold text-amber-600 whitespace-nowrap align-middle">${Number(t.active_tickets) || 0} Tiket</td>
-            <td class="px-3.5 py-3 font-bold text-emerald-600 whitespace-nowrap align-middle">${Number(t.resolved_tickets) || 0} Tiket Selesai</td>
-          `;
-          tbody.appendChild(tr);
-        });
-      }
-    }
+    allTechnicians = data;
+    renderTechniciansViews();
   } catch (err) {
     console.error('Failed to load technicians:', err);
+    const tbody = document.getElementById('techLeaderboardBody');
+    if (tbody && (!allTechnicians || allTechnicians.length === 0)) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="p-6 text-center text-rose-500 text-xs">
+            Gagal memuat data teknisi: ${esc(err.message || 'Cek koneksi')}.
+            <button type="button" onclick="loadTechnicians()" class="ml-2 px-2.5 py-1 bg-sky-600 text-white rounded-lg font-bold">Muat Ulang</button>
+          </td>
+        </tr>
+      `;
+    }
   }
 }
 
@@ -2599,6 +2633,9 @@ async function openTicketModal(ticketId) {
       else photosSection.classList.add('hidden');
     }
 
+    if (!allTechnicians || allTechnicians.length === 0) {
+      await loadTechnicians();
+    }
     document.getElementById('modalAssignTech').value = selectedTicketForModal.assigned_to || '';
     document.getElementById('modalResolutionNotes').value = selectedTicketForModal.resolution_notes || '';
     const impInput = document.getElementById('modalImprovementSuggestion');
@@ -4408,7 +4445,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.10');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.11');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');

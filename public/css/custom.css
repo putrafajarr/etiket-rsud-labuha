@@ -101,9 +101,17 @@ html, body {
 
 /* Mobile & Touch Screen Optimizations */
 @media (max-width: 768px) {
-  /* Prevent browser auto-zoom on input focus */
-  input, select, textarea {
+  /* Prevent browser auto-zoom on text input focus while keeping compact filter selects crisp */
+  input, textarea {
     font-size: 16px !important;
+  }
+  select {
+    font-size: 13px !important;
+    max-width: 100% !important;
+  }
+  #filterPriority, #filterRoom, #filterSort {
+    font-size: 12px !important;
+    text-overflow: ellipsis !important;
   }
 
   /* Kanban columns on mobile fit content naturally without huge empty scrolling */

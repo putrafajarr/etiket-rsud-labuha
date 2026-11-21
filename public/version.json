@@ -1,7 +1,7 @@
 {
-  "version": "4.10",
-  "releasedAt": "2026-11-21T08:40:00+09:00",
-  "notes": "Tampilan tanggal & jam lapor pada card Kanban, Kartu HP, Mode Teknisi, Modal Detail, dan Filter Kalender dibuat lebih responsif di layar HP Android.",
+  "version": "4.11",
+  "releasedAt": "2026-11-21T11:00:00+09:00",
+  "notes": "Perbaikan penuh layout responsif HP/APK (320px-390px) & sinkronisasi otomatis data teknisi/kinerja IT secara real-time.",
   "minApkVersion": "1.6",
   "apkVersion": "1.6",
   "apkVersionCode": 7,

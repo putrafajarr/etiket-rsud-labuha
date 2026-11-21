@@ -25,27 +25,27 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.10">
+  <link rel="stylesheet" href="/css/custom.css?v=4.11">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
   <!-- Top Navbar -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
-    <div class="px-3 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2">
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm w-full max-w-full overflow-x-hidden">
+    <div class="px-2.5 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
       <!-- Brand & Hospital Info -->
-      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
+      <div class="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
         <!-- Mobile Back Button (Appears when in sub-tab) -->
-        <button id="btnHeaderBack" type="button" onclick="handleAppBack()" class="hidden p-2 -ml-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center space-x-1.5 transition active:scale-95 shrink-0" title="Kembali ke Dashboard">
+        <button id="btnHeaderBack" type="button" onclick="handleAppBack()" class="hidden p-1.5 sm:p-2 -ml-0.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center space-x-1 transition active:scale-95 shrink-0" title="Kembali ke Dashboard">
           <i data-lucide="arrow-left" class="w-4 h-4 text-sky-700"></i>
-          <span class="text-xs font-bold text-slate-800">Kembali</span>
+          <span class="hidden sm:inline text-xs font-bold text-slate-800">Kembali</span>
         </button>
 
         <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-teal-500 text-white flex items-center justify-center font-black text-sm sm:text-lg shadow-md shadow-sky-600/20 shrink-0">
           🏥
         </div>
         <div class="min-w-0">
-          <div class="flex items-center space-x-1.5">
-            <h1 class="font-black text-slate-800 text-xs sm:text-base tracking-tight leading-none truncate">RSUD LABUHA</h1>
+          <div class="flex items-center space-x-1">
+            <h1 class="font-black text-slate-800 text-[11px] sm:text-base tracking-tight leading-none truncate">RSUD LABUHA</h1>
             <span class="px-1.5 py-0.5 bg-sky-100 text-sky-800 text-[9px] sm:text-[10px] font-black rounded-full uppercase tracking-wider shrink-0">IT</span>
           </div>
           <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate hidden sm:block">Kab. Halmahera Selatan</p>
@@ -53,7 +53,7 @@
       </div>
 
       <!-- Action buttons & Controls -->
-      <div class="flex items-center space-x-1.5 sm:space-x-2.5 shrink-0">
+      <div class="flex items-center space-x-1 sm:space-x-2 shrink-0">
         <!-- Live Supabase Status & Instant Sync -->
         <button id="btnSupabaseLiveSync" onclick="triggerManualSync()" title="Status Sinkronisasi Supabase Real-Time (Klik untuk sinkron instan)" class="p-2 sm:px-2.5 sm:py-2 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition flex items-center space-x-1.5 text-xs font-bold active:scale-95 shrink-0">
           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
@@ -242,7 +242,7 @@
   </div>
 
   <!-- Main Layout -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="flex-1 flex w-full max-w-full min-w-0 overflow-hidden">
     <!-- Desktop Sidebar -->
     <aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between hidden lg:flex">
       <div class="p-4 space-y-1">
@@ -307,72 +307,72 @@
     </aside>
 
     <!-- Main Content Area -->
-    <main class="flex-1 overflow-y-auto p-4 sm:p-6 pb-6">
+    <main class="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-24 lg:pb-6">
       
       <!-- TAB 1: TICKETS DASHBOARD (KANBAN & LIST) -->
-      <section id="view-tickets" class="space-y-6">
+      <section id="view-tickets" class="space-y-4 sm:space-y-6 w-full min-w-0">
         <!-- KPI Summary Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-3.5">
-            <div class="w-11 h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold">
-              <i data-lucide="inbox" class="w-5 h-5"></i>
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3.5 w-full min-w-0">
+          <div class="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-2 sm:space-x-3.5 min-w-0">
+            <div class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold shrink-0">
+              <i data-lucide="inbox" class="w-4 h-4 sm:w-5 sm:h-5"></i>
             </div>
-            <div>
-              <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider block">Total Tiket</span>
-              <span id="kpiTotal" class="text-xl font-black text-slate-800">0</span>
-            </div>
-          </div>
-
-          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-3.5">
-            <div class="w-11 h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
-              <i data-lucide="alert-circle" class="w-5 h-5"></i>
-            </div>
-            <div>
-              <span class="text-[11px] text-rose-500 font-bold uppercase tracking-wider block">Tiket Baru (Open)</span>
-              <span id="kpiOpen" class="text-xl font-black text-rose-700">0</span>
+            <div class="min-w-0 flex-1">
+              <span class="text-[9.5px] sm:text-[11px] text-slate-400 font-bold uppercase tracking-wider block leading-tight">Total Tiket</span>
+              <span id="kpiTotal" class="text-base sm:text-xl font-black text-slate-800 block mt-0.5">0</span>
             </div>
           </div>
 
-          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-3.5">
-            <div class="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold">
-              <i data-lucide="clock" class="w-5 h-5"></i>
+          <div class="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-2 sm:space-x-3.5 min-w-0">
+            <div class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center font-bold shrink-0">
+              <i data-lucide="alert-circle" class="w-4 h-4 sm:w-5 sm:h-5"></i>
             </div>
-            <div>
-              <span class="text-[11px] text-amber-600 font-bold uppercase tracking-wider block">Dikerjakan</span>
-              <span id="kpiInProgress" class="text-xl font-black text-amber-700">0</span>
-            </div>
-          </div>
-
-          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-3.5">
-            <div class="w-11 h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-              <i data-lucide="check-circle" class="w-5 h-5"></i>
-            </div>
-            <div>
-              <span class="text-[11px] text-emerald-600 font-bold uppercase tracking-wider block">Selesai (Resolved)</span>
-              <span id="kpiResolved" class="text-xl font-black text-emerald-700">0</span>
+            <div class="min-w-0 flex-1">
+              <span class="text-[9.5px] sm:text-[11px] text-rose-500 font-bold uppercase tracking-wider block leading-tight">Tiket Baru (Open)</span>
+              <span id="kpiOpen" class="text-base sm:text-xl font-black text-rose-700 block mt-0.5">0</span>
             </div>
           </div>
 
-          <div class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-3.5 col-span-2 lg:col-span-1">
-            <div class="w-11 h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <i data-lucide="award" class="w-5 h-5"></i>
+          <div class="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-2 sm:space-x-3.5 min-w-0">
+            <div class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold shrink-0">
+              <i data-lucide="clock" class="w-4 h-4 sm:w-5 sm:h-5"></i>
             </div>
-            <div>
-              <span class="text-[11px] text-indigo-500 font-bold uppercase tracking-wider block">Kepatuhan SLA</span>
-              <span id="kpiSla" class="text-xl font-black text-indigo-700">100%</span>
+            <div class="min-w-0 flex-1">
+              <span class="text-[9.5px] sm:text-[11px] text-amber-600 font-bold uppercase tracking-wider block leading-tight">Dikerjakan</span>
+              <span id="kpiInProgress" class="text-base sm:text-xl font-black text-amber-700 block mt-0.5">0</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-2 sm:space-x-3.5 min-w-0">
+            <div class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shrink-0">
+              <i data-lucide="check-circle" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <span class="text-[9.5px] sm:text-[11px] text-emerald-600 font-bold uppercase tracking-wider block leading-tight">Selesai (Resolved)</span>
+              <span id="kpiResolved" class="text-base sm:text-xl font-black text-emerald-700 block mt-0.5">0</span>
+            </div>
+          </div>
+
+          <div class="bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center space-x-2 sm:space-x-3.5 col-span-2 lg:col-span-1 min-w-0">
+            <div class="w-8 h-8 sm:w-11 sm:h-11 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold shrink-0">
+              <i data-lucide="award" class="w-4 h-4 sm:w-5 sm:h-5"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <span class="text-[9.5px] sm:text-[11px] text-indigo-500 font-bold uppercase tracking-wider block leading-tight">Kepatuhan SLA</span>
+              <span id="kpiSla" class="text-base sm:text-xl font-black text-indigo-700 block mt-0.5">100%</span>
             </div>
           </div>
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3">
-          <div class="flex flex-wrap items-center gap-2 flex-1 min-w-0">
-            <div class="relative w-full sm:flex-1 sm:min-w-[180px] sm:max-w-sm">
-              <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-400"></i>
+        <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
+          <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:flex-1 min-w-0">
+            <div class="relative col-span-2 sm:flex-1 sm:min-w-[180px] sm:max-w-sm min-w-0">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
               <input type="text" id="filterSearch" oninput="debounceFilter()" placeholder="Cari nomor tiket, ruangan, keluhan..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-sky-500">
             </div>
 
-            <select id="filterPriority" onchange="loadTickets()" class="flex-1 sm:flex-initial min-w-[130px] text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-medium">
+            <select id="filterPriority" onchange="loadTickets()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-white font-medium truncate">
               <option value="all">Semua Prioritas</option>
               <option value="critical">🚨 Kritis / Darurat</option>
               <option value="high">🔴 Tinggi</option>
@@ -384,15 +384,15 @@
               <option value="">Semua Ruangan RSUD</option>
             </select>
 
-            <select id="filterSort" onchange="renderTickets()" class="flex-1 sm:flex-initial min-w-[140px] text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-bold text-slate-700" title="Urutan tiket">
-              <option value="newest">🕒 Terbaru (Tanggal)</option>
-              <option value="oldest">📅 Terlama (Tanggal)</option>
-              <option value="priority">🚨 Prioritas Tertinggi</option>
+            <select id="filterSort" onchange="renderTickets()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 truncate" title="Urutan tiket">
+              <option value="newest">🕒 Terbaru</option>
+              <option value="oldest">📅 Terlama</option>
+              <option value="priority">🚨 Prioritas</option>
             </select>
           </div>
 
           <!-- View Mode Toggle (Kanban vs Table) -->
-          <div class="flex items-center space-x-1 border border-slate-200 p-1 rounded-xl self-end md:self-auto">
+          <div class="flex items-center space-x-1 border border-slate-200 p-1 rounded-xl self-end md:self-auto shrink-0">
             <button onclick="setViewMode('kanban')" id="btnViewKanban" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white transition flex items-center space-x-1">
               <i data-lucide="columns" class="w-3.5 h-3.5"></i>
               <span>Kanban</span>
@@ -405,58 +405,58 @@
         </div>
 
         <!-- Kanban View Container -->
-        <div id="kanbanContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div id="kanbanContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 w-full min-w-0">
           <!-- Col 1: Menunggu Penugasan (Open) -->
-          <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col">
-            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200">
-              <div class="flex items-center space-x-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">Tiket Baru (Open)</h3>
+          <div class="bg-slate-100/70 p-3 sm:p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col min-w-0 w-full">
+            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 gap-2 min-w-0">
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0"></span>
+                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800 truncate">Tiket Baru (Open)</h3>
               </div>
-              <span id="colCountOpen" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm">0</span>
+              <span id="colCountOpen" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm shrink-0">0</span>
             </div>
-            <div id="colOpenList" class="space-y-3 flex-1 overflow-y-auto pr-1"></div>
+            <div id="colOpenList" class="space-y-3 flex-1 overflow-y-auto pr-0.5 min-w-0"></div>
           </div>
 
           <!-- Col 2: Ditugaskan (Assigned) -->
-          <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col">
-            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200">
-              <div class="flex items-center space-x-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">Ditugaskan</h3>
+          <div class="bg-slate-100/70 p-3 sm:p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col min-w-0 w-full">
+            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 gap-2 min-w-0">
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800 truncate">Ditugaskan</h3>
               </div>
-              <span id="colCountAssigned" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm">0</span>
+              <span id="colCountAssigned" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm shrink-0">0</span>
             </div>
-            <div id="colAssignedList" class="space-y-3 flex-1 overflow-y-auto pr-1"></div>
+            <div id="colAssignedList" class="space-y-3 flex-1 overflow-y-auto pr-0.5 min-w-0"></div>
           </div>
 
           <!-- Col 3: Dikerjakan / Pending (In Progress) -->
-          <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col">
-            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200">
-              <div class="flex items-center space-x-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
-                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">Sedang Dikerjakan</h3>
+          <div class="bg-slate-100/70 p-3 sm:p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col min-w-0 w-full">
+            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 gap-2 min-w-0">
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0"></span>
+                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800 truncate">Sedang Dikerjakan</h3>
               </div>
-              <span id="colCountProgress" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm">0</span>
+              <span id="colCountProgress" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm shrink-0">0</span>
             </div>
-            <div id="colProgressList" class="space-y-3 flex-1 overflow-y-auto pr-1"></div>
+            <div id="colProgressList" class="space-y-3 flex-1 overflow-y-auto pr-0.5 min-w-0"></div>
           </div>
 
           <!-- Col 4: Selesai (Resolved) -->
-          <div class="bg-slate-100/70 p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col">
-            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200">
-              <div class="flex items-center space-x-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800">Selesai (Resolved)</h3>
+          <div class="bg-slate-100/70 p-3 sm:p-3.5 rounded-2xl border border-slate-200 flex flex-col kanban-col min-w-0 w-full">
+            <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-200 gap-2 min-w-0">
+              <div class="flex items-center space-x-2 min-w-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <h3 class="font-bold text-xs uppercase tracking-wider text-slate-800 truncate">Selesai (Resolved)</h3>
               </div>
-              <span id="colCountResolved" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm">0</span>
+              <span id="colCountResolved" class="px-2 py-0.5 rounded-full bg-white text-slate-700 text-xs font-bold shadow-sm shrink-0">0</span>
             </div>
-            <div id="colResolvedList" class="space-y-3 flex-1 overflow-y-auto pr-1"></div>
+            <div id="colResolvedList" class="space-y-3 flex-1 overflow-y-auto pr-0.5 min-w-0"></div>
           </div>
         </div>
 
         <!-- Table View Container -->
-        <div id="tableViewContainer" class="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <div id="tableViewContainer" class="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm w-full min-w-0">
           <!-- Mobile Sub-Toggle: Card List vs Horizontal Full Table -->
           <div class="sm:hidden p-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
             <span class="text-[11px] font-bold text-slate-700">Tampilan Data Tiket:</span>
@@ -1637,11 +1637,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.10"></script>
-  <script src="/js/bcrypt.min.js?v=4.10"></script>
-  <script src="/js/supabase-client.js?v=4.10"></script>
-  <script src="/js/sound.js?v=4.10"></script>
-  <script src="/js/app.js?v=4.10"></script>
+  <script src="/js/qrcode.min.js?v=4.11"></script>
+  <script src="/js/bcrypt.min.js?v=4.11"></script>
+  <script src="/js/supabase-client.js?v=4.11"></script>
+  <script src="/js/sound.js?v=4.11"></script>
+  <script src="/js/app.js?v=4.11"></script>
 </body>
 </html>
 
