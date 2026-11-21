@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.11';
+const APP_WEB_VERSION = '4.12';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -884,6 +884,7 @@ async function runRealtimeSyncCycle() {
           });
 
           allTickets = freshTickets;
+          window._ticketsLoadedOnce = true;
           lastSyncSignature = currentSig;
           knownTicketIds = currentIds;
 
@@ -899,6 +900,14 @@ async function runRealtimeSyncCycle() {
               selectedTicketForModal = up;
               openTicketModal(up.id);
             }
+          }
+        } else {
+          // Real-time midnight date rollover guard for 'Hari Ini (Live)' filter
+          const todayYmd = formatLocalYmd(new Date());
+          const dateMode = document.getElementById('filterDatePreset')?.value || 'today';
+          if (dateMode === 'today' && window._lastRenderedLocalYmd && window._lastRenderedLocalYmd !== todayYmd) {
+            renderTickets();
+            loadStats();
           }
         }
       }
@@ -1298,15 +1307,145 @@ function debounceFilter() {
   }, 200);
 }
 
-// Load Tickets (keeps allTickets unfiltered; toolbar filters apply cleanly in renderTickets)
+function formatLocalYmd(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function formatShortIdDate(ymd) {
+  if (!ymd || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return '';
+  const [y, m, d] = ymd.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function getActiveTicketDateBounds() {
+  const mode = document.getElementById('filterDatePreset')?.value || 'today';
+  const now = new Date();
+  const todayYmd = formatLocalYmd(now);
+
+  if (mode === 'today') {
+    return {
+      mode,
+      startMs: new Date(`${todayYmd}T00:00:00`).getTime(),
+      endMs: new Date(`${todayYmd}T23:59:59.999`).getTime(),
+      label: `Hari Ini (${formatShortIdDate(todayYmd)})`
+    };
+  }
+  if (mode === 'yesterday') {
+    const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+    const ymd = formatLocalYmd(y);
+    return {
+      mode,
+      startMs: new Date(`${ymd}T00:00:00`).getTime(),
+      endMs: new Date(`${ymd}T23:59:59.999`).getTime(),
+      label: `Kemarin (${formatShortIdDate(ymd)})`
+    };
+  }
+  if (mode === '7days') {
+    const s = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const sYmd = formatLocalYmd(s);
+    return {
+      mode,
+      startMs: new Date(`${sYmd}T00:00:00`).getTime(),
+      endMs: new Date(`${todayYmd}T23:59:59.999`).getTime(),
+      label: '7 Hari Terakhir'
+    };
+  }
+  if (mode === 'month') {
+    const s = new Date(now.getFullYear(), now.getMonth(), 1);
+    const sYmd = formatLocalYmd(s);
+    return {
+      mode,
+      startMs: new Date(`${sYmd}T00:00:00`).getTime(),
+      endMs: new Date(`${todayYmd}T23:59:59.999`).getTime(),
+      label: 'Bulan Ini'
+    };
+  }
+  if (mode === 'custom') {
+    const sVal = document.getElementById('filterTicketStartDate')?.value || '';
+    const eVal = document.getElementById('filterTicketEndDate')?.value || '';
+    const startMs = sVal ? new Date(`${sVal}T00:00:00`).getTime() : null;
+    const endMs = eVal ? new Date(`${eVal}T23:59:59.999`).getTime() : null;
+    let label = 'Tanggal Kustom';
+    if (sVal && eVal && sVal === eVal) label = `Tanggal ${formatShortIdDate(sVal)}`;
+    else if (sVal && eVal) label = `${formatShortIdDate(sVal)} – ${formatShortIdDate(eVal)}`;
+    else if (sVal) label = `Mulai ${formatShortIdDate(sVal)}`;
+    else if (eVal) label = `Sampai ${formatShortIdDate(eVal)}`;
+    return { mode, startMs, endMs, label };
+  }
+  return { mode: 'all', startMs: null, endMs: null, label: 'Semua Tanggal' };
+}
+
+function getDateFilteredTickets(list) {
+  const bounds = getActiveTicketDateBounds();
+  if (bounds.startMs === null && bounds.endMs === null) {
+    return (list || []).slice();
+  }
+  return (list || []).filter(t => {
+    const ts = new Date(t.created_at || 0).getTime();
+    if (!ts || Number.isNaN(ts)) return false;
+    if (bounds.startMs !== null && ts < bounds.startMs) return false;
+    if (bounds.endMs !== null && ts > bounds.endMs) return false;
+    return true;
+  });
+}
+
+function onTicketDatePresetChange() {
+  const mode = document.getElementById('filterDatePreset')?.value || 'today';
+  const wrap = document.getElementById('filterCustomDateWrap');
+  const startEl = document.getElementById('filterTicketStartDate');
+  const endEl = document.getElementById('filterTicketEndDate');
+
+  if (mode === 'custom') {
+    if (wrap) wrap.classList.remove('hidden');
+    const todayYmd = formatLocalYmd(new Date());
+    if (startEl && !startEl.value) startEl.value = todayYmd;
+    if (endEl && !endEl.value) {
+      endEl.value = startEl?.value || todayYmd;
+      endEl.dataset.userEdited = 'false';
+    }
+  } else if (wrap) {
+    wrap.classList.add('hidden');
+  }
+
+  renderTickets();
+  loadStats();
+}
+
+function onTicketCustomDateChange(source) {
+  const startEl = document.getElementById('filterTicketStartDate');
+  const endEl = document.getElementById('filterTicketEndDate');
+  if (source === 'end' && endEl) {
+    endEl.dataset.userEdited = endEl.value ? 'true' : 'false';
+  } else if (source === 'start' && startEl && endEl) {
+    if (startEl.value && (endEl.dataset.userEdited !== 'true' || !endEl.value || endEl.value < startEl.value)) {
+      endEl.value = startEl.value;
+    }
+  }
+  renderTickets();
+  loadStats();
+}
+
+function showAllTicketsWithBacklog() {
+  const presetEl = document.getElementById('filterDatePreset');
+  if (presetEl) {
+    presetEl.value = 'all';
+    onTicketDatePresetChange();
+  }
+}
+
+// Load Tickets (keeps allTickets unfiltered; toolbar date & field filters apply cleanly in real time)
 async function loadTickets() {
   try {
     const res = await fetch('/api/tickets');
     const rows = await res.json();
     if (res.ok && Array.isArray(rows)) {
       allTickets = rows;
+      window._ticketsLoadedOnce = true;
     }
     renderTickets();
+    loadStats();
     loadTechnicianTickets();
   } catch (err) {
     console.error('Failed to load tickets:', err);
@@ -1319,7 +1458,8 @@ function getFilteredTickets(list) {
   const roomId = document.getElementById('filterRoom')?.value || '';
   const sortBy = document.getElementById('filterSort')?.value || 'newest';
 
-  const filtered = (list || []).filter(t => {
+  const dateScoped = getDateFilteredTickets(list);
+  const filtered = dateScoped.filter(t => {
     if (priority && priority !== 'all' && t.priority !== priority) return false;
     if (roomId && String(t.room_id) !== String(roomId)) return false;
     if (search) {
@@ -1376,16 +1516,40 @@ function renderTickets() {
   if (mobileCardContainer) mobileCardContainer.innerHTML = '';
 
   const visibleTickets = getFilteredTickets(allTickets);
+  const dateBounds = getActiveTicketDateBounds();
+  const dateScopedTickets = getDateFilteredTickets(allTickets);
+  window._lastRenderedLocalYmd = formatLocalYmd(new Date());
   let countOpen = 0, countAssigned = 0, countProgress = 0, countResolved = 0;
 
+  const summaryTextEl = document.getElementById('ticketFilterSummaryText');
+  if (summaryTextEl) {
+    summaryTextEl.textContent = `${dateBounds.label} • ${visibleTickets.length} tiket`;
+  }
+
+  const backlogBtn = document.getElementById('ticketBacklogAlertBtn');
+  const backlogTextEl = document.getElementById('ticketBacklogAlertText');
+  if (backlogBtn && backlogTextEl) {
+    const inScopeIds = new Set(dateScopedTickets.map(t => t.id));
+    const olderActive = (allTickets || []).filter(t => !inScopeIds.has(t.id) && t.status !== 'resolved' && t.status !== 'closed');
+    if (olderActive.length > 0 && dateBounds.mode !== 'all') {
+      backlogTextEl.textContent = `⚠️ ${olderActive.length} tiket hari lalu belum selesai — Lihat Semua`;
+      backlogBtn.classList.remove('hidden');
+    } else {
+      backlogBtn.classList.add('hidden');
+    }
+  }
+
   if (visibleTickets.length === 0) {
+    const emptyHint = dateBounds.mode !== 'all'
+      ? `Tidak ada tiket pada filter ${esc(dateBounds.label)}. <button type="button" onclick="showAllTicketsWithBacklog()" class="ml-1 underline font-bold text-sky-600">Tampilkan Semua Tanggal</button>`
+      : 'Belum ada tiket yang sesuai dengan filter atau pencarian Anda.';
     if (tableBody) {
       tableBody.innerHTML = `
         <tr>
           <td colspan="10" class="p-8 text-center text-slate-400">
             <div class="text-3xl mb-2">📭</div>
             <p class="font-bold text-sm text-slate-700">Tidak Ada Data Tiket</p>
-            <p class="text-xs text-slate-400 mt-1">Belum ada tiket yang sesuai dengan filter atau pencarian Anda.</p>
+            <p class="text-xs text-slate-400 mt-1">${emptyHint}</p>
           </td>
         </tr>
       `;
@@ -1395,7 +1559,7 @@ function renderTickets() {
         <div class="p-8 text-center text-slate-400 bg-white">
           <div class="text-3xl mb-2">📭</div>
           <p class="font-bold text-sm text-slate-700">Tidak Ada Data Tiket</p>
-          <p class="text-xs text-slate-400 mt-1">Belum ada tiket yang sesuai dengan filter atau pencarian Anda.</p>
+          <p class="text-xs text-slate-400 mt-1">${emptyHint}</p>
         </div>
       `;
     }
@@ -1597,7 +1761,10 @@ function renderTickets() {
   if (countAssignedEl) countAssignedEl.textContent = countAssigned;
   if (countProgressEl) countProgressEl.textContent = countProgress;
   if (countResolvedEl) countResolvedEl.textContent = countResolved;
-  if (badgeOpenCountEl) badgeOpenCountEl.textContent = countOpen;
+  if (badgeOpenCountEl) {
+    const allOpenCount = (allTickets || []).filter(t => t.status === 'open').length;
+    badgeOpenCountEl.textContent = allOpenCount;
+  }
 
   lucide.createIcons();
 }
@@ -2425,11 +2592,34 @@ function assignToSelf() {
   });
 }
 
-// Load KPI Stats
+// Load KPI Stats (follows active date filter once tickets are loaded for real-time accuracy)
 async function loadStats() {
   try {
-    const res = await fetch('/api/reports/stats');
-    const stats = await res.json();
+    let stats;
+    if (window._ticketsLoadedOnce && Array.isArray(allTickets)) {
+      const list = getDateFilteredTickets(allTickets);
+      const total = list.length;
+      const open = list.filter(r => r.status === 'open' || r.status === 'assigned').length;
+      const inProgress = list.filter(r => r.status === 'in_progress' || r.status === 'pending').length;
+      const resolvedRows = list.filter(r => r.status === 'resolved' || r.status === 'closed');
+      const resolved = resolvedRows.length;
+      let slaCompliance = 100;
+      if (resolved > 0) {
+        const onTrack = resolvedRows.filter(r => {
+          if (r.sla_status === 'breached') return false;
+          if (r.sla_status === 'on_track') return true;
+          if (r.resolved_at && r.target_resolve_time) {
+            return new Date(r.resolved_at).getTime() <= new Date(r.target_resolve_time).getTime();
+          }
+          return true;
+        }).length;
+        slaCompliance = Math.round((onTrack / resolved) * 100);
+      }
+      stats = { total, open, inProgress, resolved, slaCompliance };
+    } else {
+      const res = await fetch('/api/reports/stats');
+      stats = await res.json();
+    }
 
     document.getElementById('kpiTotal').textContent = stats.total;
     document.getElementById('kpiOpen').textContent = stats.open;
@@ -4445,7 +4635,7 @@ async function exportExcel() {
   try {
     await loadAppSettings();
     if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.11');
+      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.12');
     }
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');

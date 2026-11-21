@@ -25,7 +25,7 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <!-- bcryptjs -->
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <link rel="stylesheet" href="/css/custom.css?v=4.11">
+  <link rel="stylesheet" href="/css/custom.css?v=4.12">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col font-sans">
 
@@ -365,41 +365,77 @@
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
-          <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:flex-1 min-w-0">
-            <div class="relative col-span-2 sm:flex-1 sm:min-w-[180px] sm:max-w-sm min-w-0">
-              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
-              <input type="text" id="filterSearch" oninput="debounceFilter()" placeholder="Cari nomor tiket, ruangan, keluhan..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-sky-500">
+        <div class="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-2.5 w-full min-w-0">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 w-full min-w-0">
+            <div class="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full md:flex-1 min-w-0">
+              <div class="relative col-span-2 sm:flex-1 sm:min-w-[180px] sm:max-w-sm min-w-0">
+                <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 sm:top-3 text-slate-400"></i>
+                <input type="text" id="filterSearch" oninput="debounceFilter()" placeholder="Cari nomor tiket, ruangan, keluhan..." class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-sky-500">
+              </div>
+
+              <select id="filterPriority" onchange="renderTickets()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-white font-medium truncate">
+                <option value="all">Semua Prioritas</option>
+                <option value="critical">🚨 Kritis / Darurat</option>
+                <option value="high">🔴 Tinggi</option>
+                <option value="medium">🟡 Sedang</option>
+                <option value="low">🟢 Rendah</option>
+              </select>
+
+              <select id="filterDatePreset" onchange="onTicketDatePresetChange()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-sky-200 bg-sky-50/70 font-bold text-sky-900 truncate" title="Filter tanggal masuk tiket (Real-Time)">
+                <option value="today">📅 Hari Ini (Live)</option>
+                <option value="yesterday">📆 Kemarin</option>
+                <option value="7days">🗓️ 7 Hari</option>
+                <option value="month">🗓️ Bulan Ini</option>
+                <option value="custom">🎯 Pilih Tanggal</option>
+                <option value="all">📋 Semua Tanggal</option>
+              </select>
+
+              <select id="filterRoom" onchange="renderTickets()" class="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-medium hidden md:block min-w-0">
+                <option value="">Semua Ruangan RSUD</option>
+              </select>
             </div>
 
-            <select id="filterPriority" onchange="loadTickets()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-white font-medium truncate">
-              <option value="all">Semua Prioritas</option>
-              <option value="critical">🚨 Kritis / Darurat</option>
-              <option value="high">🔴 Tinggi</option>
-              <option value="medium">🟡 Sedang</option>
-              <option value="low">🟢 Rendah</option>
-            </select>
+            <!-- Sort & View Mode Toggle -->
+            <div class="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto min-w-0 shrink-0">
+              <select id="filterSort" onchange="renderTickets()" class="min-w-0 max-w-[140px] sm:max-w-none text-xs py-1.5 px-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 truncate" title="Urutan tiket">
+                <option value="newest">🕒 Terbaru</option>
+                <option value="oldest">📅 Terlama</option>
+                <option value="priority">🚨 Prioritas</option>
+              </select>
 
-            <select id="filterRoom" onchange="loadTickets()" class="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white font-medium hidden md:block">
-              <option value="">Semua Ruangan RSUD</option>
-            </select>
-
-            <select id="filterSort" onchange="renderTickets()" class="w-full sm:w-auto min-w-0 text-xs py-2 px-2.5 rounded-xl border border-slate-200 bg-white font-bold text-slate-700 truncate" title="Urutan tiket">
-              <option value="newest">🕒 Terbaru</option>
-              <option value="oldest">📅 Terlama</option>
-              <option value="priority">🚨 Prioritas</option>
-            </select>
+              <div class="flex items-center space-x-1 border border-slate-200 p-1 rounded-xl shrink-0">
+                <button onclick="setViewMode('kanban')" id="btnViewKanban" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white transition flex items-center space-x-1">
+                  <i data-lucide="columns" class="w-3.5 h-3.5"></i>
+                  <span>Kanban</span>
+                </button>
+                <button onclick="setViewMode('table')" id="btnViewTable" class="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1">
+                  <i data-lucide="table" class="w-3.5 h-3.5"></i>
+                  <span>Tabel</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- View Mode Toggle (Kanban vs Table) -->
-          <div class="flex items-center space-x-1 border border-slate-200 p-1 rounded-xl self-end md:self-auto shrink-0">
-            <button onclick="setViewMode('kanban')" id="btnViewKanban" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 text-white transition flex items-center space-x-1">
-              <i data-lucide="columns" class="w-3.5 h-3.5"></i>
-              <span>Kanban</span>
-            </button>
-            <button onclick="setViewMode('table')" id="btnViewTable" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition flex items-center space-x-1">
-              <i data-lucide="table" class="w-3.5 h-3.5"></i>
-              <span>Tabel</span>
+          <!-- Custom Date Range Picker (Shown when '🎯 Pilih Tanggal' selected) -->
+          <div id="filterCustomDateWrap" class="hidden pt-2 border-t border-slate-100 grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 min-w-0">
+            <div class="min-w-0">
+              <label for="filterTicketStartDate" class="block text-[10px] font-bold text-slate-500 mb-0.5">Dari Tanggal</label>
+              <input type="date" id="filterTicketStartDate" onchange="onTicketCustomDateChange('start')" oninput="onTicketCustomDateChange('start')" class="w-full">
+            </div>
+            <div class="min-w-0">
+              <label for="filterTicketEndDate" class="block text-[10px] font-bold text-slate-500 mb-0.5">Sampai Tanggal</label>
+              <input type="date" id="filterTicketEndDate" onchange="onTicketCustomDateChange('end')" oninput="onTicketCustomDateChange('end')" class="w-full">
+            </div>
+          </div>
+
+          <!-- Real-Time Date Filter Status & Previous Unfinished Backlog Alert -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-[11px] min-w-0">
+            <span id="ticketFilterSummaryBadge" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-200 text-sky-800 font-bold max-w-full truncate">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+              <span id="ticketFilterSummaryText" class="truncate">Hari Ini (Real-Time) • 0 tiket</span>
+            </span>
+            <button type="button" id="ticketBacklogAlertBtn" onclick="showAllTicketsWithBacklog()" class="hidden inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 font-bold text-[10.5px] transition active:scale-95 max-w-full truncate">
+              <span id="ticketBacklogAlertText" class="truncate">⚠️ Ada tiket hari lalu belum selesai — Lihat Semua</span>
             </button>
           </div>
         </div>
@@ -1637,11 +1673,11 @@
     </div>
   </div>
 
-  <script src="/js/qrcode.min.js?v=4.11"></script>
-  <script src="/js/bcrypt.min.js?v=4.11"></script>
-  <script src="/js/supabase-client.js?v=4.11"></script>
-  <script src="/js/sound.js?v=4.11"></script>
-  <script src="/js/app.js?v=4.11"></script>
+  <script src="/js/qrcode.min.js?v=4.12"></script>
+  <script src="/js/bcrypt.min.js?v=4.12"></script>
+  <script src="/js/supabase-client.js?v=4.12"></script>
+  <script src="/js/sound.js?v=4.12"></script>
+  <script src="/js/app.js?v=4.12"></script>
 </body>
 </html>
 

@@ -1,7 +1,7 @@
 {
-  "version": "4.11",
-  "releasedAt": "2026-11-21T11:00:00+09:00",
-  "notes": "Perbaikan penuh layout responsif HP/APK (320px-390px) & sinkronisasi otomatis data teknisi/kinerja IT secara real-time.",
+  "version": "4.12",
+  "releasedAt": "2026-11-21T11:20:00+09:00",
+  "notes": "Filter tanggal real-time (Hari Ini Live, Kemarin, 7 Hari, Bulan Ini, Pilih Tanggal, Semua Tanggal) pada daftar & Kanban tiket.",
   "minApkVersion": "1.6",
   "apkVersion": "1.6",
   "apkVersionCode": 7,
