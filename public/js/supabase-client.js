@@ -181,7 +181,7 @@
 
   async function generateQrDataUrl(text, size = 320) {
     if (!global.QRCode) {
-      await ensureScriptLoaded('/js/qrcode.min.js?v=4.12');
+      await ensureScriptLoaded('/js/qrcode.min.js?v=4.13');
     }
     const qrLib = global.QRCode;
     if (!qrLib || typeof qrLib.toDataURL !== 'function') {
@@ -200,7 +200,7 @@
   async function getBcryptLib() {
     let lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     if (!lib) {
-      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.12').catch(() => {});
+      await ensureScriptLoaded('/js/bcrypt.min.js?v=4.13').catch(() => {});
       lib = global.bcrypt || (global.dcodeIO && global.dcodeIO.bcrypt);
     }
     return lib;
@@ -259,6 +259,19 @@
     } catch (e) {
       return text;
     }
+  }
+
+  async function supabaseRequestAllPages(pathPrefix) {
+    const pageSize = 1000;
+    const all = [];
+    for (let offset = 0; offset < 20000; offset += pageSize) {
+      const sep = pathPrefix.includes('?') ? '&' : '?';
+      const batch = await supabaseRequest(`${pathPrefix}${sep}limit=${pageSize}&offset=${offset}`);
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      all.push(...batch);
+      if (batch.length < pageSize) break;
+    }
+    return all;
   }
 
   async function parseRequestBody(options = {}) {
@@ -425,6 +438,9 @@
     return jsonResponse({ user: safeUser, token }, 200);
   }
 
+  const TICKET_DIGEST_COLS = 'id,status,assigned_to,assigned_to_name,priority,updated_at,title,created_at';
+  const TICKET_SUMMARY_COLS = 'id,ticket_no,room_id,room_name,category_id,category_name,reporter_name,reporter_phone,reporter_email,reporter_role,title,description,priority,channel,status,assigned_to,assigned_to_name,assigned_at,target_response_time,actual_response_time,target_resolve_time,actual_resolve_time,sla_status,pending_reason,resolution_notes,improvement_suggestion,wa_sent_at,satisfaction_rating,satisfaction_feedback,created_at,updated_at,resolved_at,closed_at';
+
   async function handleGetTickets(queryString) {
     const params = new URLSearchParams(queryString);
     const status = params.get('status');
@@ -432,18 +448,61 @@
     const roomId = params.get('roomId');
     const categoryId = params.get('categoryId');
     const techId = params.get('techId');
+    const summaryMode = params.get('summary') === '1';
+    const digestMode = params.get('digest') === '1';
+    const photosOnlyMode = params.get('photosOnly') === '1';
     const search = (params.get('search') || '').trim().toLowerCase();
 
-    const supaFilters = ['select=*', 'order=created_at.desc'];
+    if (photosOnlyMode) {
+      const ids = String(params.get('ids') || '')
+        .split(',')
+        .map(v => parseInt(v, 10))
+        .filter(n => Number.isInteger(n) && n > 0)
+        .slice(0, 100);
+      if (ids.length === 0) return jsonResponse([], 200);
+      const photoRows = await supabaseRequest(`/tickets?select=id,photo_url,proof_photo_url&id=in.(${ids.join(',')})`);
+      return jsonResponse(photoRows || [], 200);
+    }
+
+    const selectCols = digestMode
+      ? TICKET_DIGEST_COLS
+      : (summaryMode ? TICKET_SUMMARY_COLS : '*');
+
+    const supaFilters = [`select=${selectCols}`, 'order=created_at.desc'];
     if (status && status !== 'all') supaFilters.push(`status=eq.${encodeURIComponent(status)}`);
     if (priority && priority !== 'all') supaFilters.push(`priority=eq.${encodeURIComponent(priority)}`);
     if (roomId) supaFilters.push(`room_id=eq.${encodeURIComponent(roomId)}`);
     if (categoryId) supaFilters.push(`category_id=eq.${encodeURIComponent(categoryId)}`);
     if (techId) supaFilters.push(`assigned_to=eq.${encodeURIComponent(techId)}`);
 
-    let rows = await supabaseRequest(`/tickets?${supaFilters.join('&')}`);
+    if (digestMode) {
+      const rows = await supabaseRequestAllPages(`/tickets?${supaFilters.join('&')}`);
+      return jsonResponse(sortTicketsDateDesc(rows), 200);
+    }
+
+    let rows;
+    if (summaryMode) {
+      const [summaryRows, photoIdRows, proofIdRows] = await Promise.all([
+        supabaseRequestAllPages(`/tickets?${supaFilters.join('&')}`),
+        supabaseRequestAllPages('/tickets?select=id&photo_url=not.is.null').catch(() => []),
+        supabaseRequestAllPages('/tickets?select=id&proof_photo_url=not.is.null').catch(() => [])
+      ]);
+      const photoIdSet = new Set((photoIdRows || []).map(r => Number(r.id)));
+      const proofIdSet = new Set((proofIdRows || []).map(r => Number(r.id)));
+      rows = (summaryRows || []).map(r => Object.assign({}, r, {
+        has_photo: photoIdSet.has(Number(r.id)),
+        has_proof: proofIdSet.has(Number(r.id))
+      }));
+    } else {
+      const fullRows = await supabaseRequestAllPages(`/tickets?${supaFilters.join('&')}`);
+      rows = (fullRows || []).map(r => Object.assign({}, r, {
+        has_photo: Boolean(r.photo_url),
+        has_proof: Boolean(r.proof_photo_url)
+      }));
+    }
+
     if (search) {
-      rows = (rows || []).filter(t =>
+      rows = rows.filter(t =>
         String(t.ticket_no || '').toLowerCase().includes(search) ||
         String(t.title || '').toLowerCase().includes(search) ||
         String(t.description || '').toLowerCase().includes(search) ||
@@ -529,7 +588,7 @@
 
     let photoUrl = fields.photo_url || null;
     if (files.photo) {
-      photoUrl = await compressImageFile(files.photo, { maxDim: 1024, quality: 0.72, maxLength: 700000 });
+      photoUrl = await compressImageFile(files.photo, { maxDim: 960, quality: 0.70, maxLength: 450000 });
     }
 
     const slaHoursMap = {
@@ -607,7 +666,7 @@
     }
 
     const [ticketRows, userRows] = await Promise.all([
-      supabaseRequest(`/tickets?select=*&id=eq.${ticketId}&limit=1`),
+      supabaseRequest(`/tickets?select=${TICKET_SUMMARY_COLS}&id=eq.${ticketId}&limit=1`),
       supabaseRequest(`/users?select=id,name,username,role,phone&id=eq.${techId}&limit=1`)
     ]);
 
@@ -636,7 +695,7 @@
       updated_at: nowIso
     };
 
-    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}`, {
+    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}&select=${TICKET_SUMMARY_COLS}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: patchData
@@ -659,7 +718,7 @@
     const userName = (fields.user_name || 'Teknisi IT').trim();
     const messagePreview = (fields.message || `Kirim WhatsApp (${waType}) ke pelapor`).trim().slice(0, 600);
 
-    const ticketRows = await supabaseRequest(`/tickets?select=*&id=eq.${ticketId}&limit=1`);
+    const ticketRows = await supabaseRequest(`/tickets?select=id,wa_sent_at&id=eq.${ticketId}&limit=1`);
     if (!ticketRows || ticketRows.length === 0) {
       return jsonResponse({ error: 'Tiket tidak ditemukan' }, 404);
     }
@@ -667,7 +726,7 @@
     const nowIso = new Date().toISOString();
     const waSentAt = currentTicket.wa_sent_at || nowIso;
 
-    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}`, {
+    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}&select=${TICKET_SUMMARY_COLS}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: {
@@ -699,7 +758,7 @@
       return jsonResponse({ error: 'Status tiket wajib dipilih' }, 400);
     }
 
-    const ticketRows = await supabaseRequest(`/tickets?select=*&id=eq.${ticketId}&limit=1`);
+    const ticketRows = await supabaseRequest(`/tickets?select=id,status,reporter_phone,wa_sent_at,actual_response_time,resolved_at,actual_resolve_time,target_resolve_time&id=eq.${ticketId}&limit=1`);
     if (!ticketRows || ticketRows.length === 0) {
       return jsonResponse({ error: 'Tiket tidak ditemukan' }, 404);
     }
@@ -729,9 +788,9 @@
 
     if (files.proof_photo) {
       patchData.proof_photo_url = await compressImageFile(files.proof_photo, {
-        maxDim: 1024,
-        quality: 0.72,
-        maxLength: 700000
+        maxDim: 960,
+        quality: 0.70,
+        maxLength: 450000
       });
     } else if (fields.proof_photo_url) {
       patchData.proof_photo_url = fields.proof_photo_url;
@@ -761,7 +820,7 @@
       }
     }
 
-    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}`, {
+    const updated = await supabaseRequest(`/tickets?id=eq.${ticketId}&select=${TICKET_SUMMARY_COLS}`, {
       method: 'PATCH',
       headers: { Prefer: 'return=representation' },
       body: patchData
@@ -942,7 +1001,7 @@
     const userCols = 'id,username,name,role,phone,email,room_id,specialization,is_active,created_at';
     const [users, tickets] = await Promise.all([
       supabaseRequest(`/users?select=${userCols}&is_active=neq.0&order=id.asc`),
-      withTicketCounts ? supabaseRequest('/tickets?select=id,assigned_to,status') : Promise.resolve(null)
+      withTicketCounts ? supabaseRequestAllPages('/tickets?select=id,assigned_to,status') : Promise.resolve(null)
     ]);
 
     const list = users || [];
@@ -1045,7 +1104,7 @@
   }
 
   async function handleReportsStats() {
-    const rows = await supabaseRequest('/tickets?select=id,status,priority,sla_status,target_resolve_time,resolved_at');
+    const rows = await supabaseRequestAllPages('/tickets?select=id,status,priority,sla_status,target_resolve_time,resolved_at');
     const list = rows || [];
     const total = list.length;
     const open = list.filter(r => r.status === 'open' || r.status === 'assigned').length;

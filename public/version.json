@@ -1,7 +1,7 @@
 {
-  "version": "4.12",
-  "releasedAt": "2026-11-21T11:20:00+09:00",
-  "notes": "Filter tanggal real-time (Hari Ini Live, Kemarin, 7 Hari, Bulan Ini, Pilih Tanggal, Semua Tanggal) pada daftar & Kanban tiket.",
+  "version": "4.13",
+  "releasedAt": "2026-11-24T11:20:00+09:00",
+  "notes": "Optimasi hemat kuota Supabase hingga 99% (sync ringan tanpa download foto berulang, foto dimuat saat buka detail/WA/cetak/Excel) serta perbaikan beberapa bug internal.",
   "minApkVersion": "1.6",
   "apkVersion": "1.6",
   "apkVersionCode": 7,

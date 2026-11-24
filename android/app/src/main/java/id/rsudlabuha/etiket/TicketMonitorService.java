@@ -46,7 +46,7 @@ public class TicketMonitorService extends Service {
     public static final String CHANNEL_BG_ID = "etiket_monitor_bg_v1";
     public static final String CHANNEL_ALERT_ID = "etiket_urgent_alerts_v2";
     private static final int FOREGROUND_ID = 9001;
-    private static final long POLL_INTERVAL_MS = 4500L;
+    private static final long POLL_INTERVAL_MS = 12000L;
 
     public static final String ACTION_START_MONITOR = "id.rsudlabuha.etiket.ACTION_START";
     public static final String ACTION_STOP_MONITOR = "id.rsudlabuha.etiket.ACTION_STOP";
@@ -228,7 +228,7 @@ public class TicketMonitorService extends Service {
     }
 
     private void pollSupabaseDirectFallback(int lastSeenId) {
-        String supaUrl = "https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets?select=id,ticket_no,room_name,title,reporter_name,priority,status,assigned_to,assigned_to_name,updated_at&order=updated_at.desc.nullslast,id.desc&limit=30";
+        String supaUrl = "https://kwjmzugilxbuqlrgangt.supabase.co/rest/v1/tickets?select=id,ticket_no,room_name,title,reporter_name,priority,status,assigned_to,assigned_to_name,updated_at&order=updated_at.desc.nullslast,id.desc&limit=15";
         String anonKey = "sb_publishable_XafHR40fyOY_VKGKLn-paA_QDa_2xb6";
         HttpURLConnection conn = null;
         try {

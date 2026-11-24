@@ -158,7 +158,7 @@ async function previewImage(input) {
   try {
     let previewUrl = null;
     if (typeof window.compressImageFile === 'function') {
-      previewUrl = await window.compressImageFile(file, { maxDim: 1024, quality: 0.72 });
+      previewUrl = await window.compressImageFile(file, { maxDim: 960, quality: 0.70, maxLength: 450000 });
     } else {
       previewUrl = await new Promise((resolve, reject) => {
         const r = new FileReader();

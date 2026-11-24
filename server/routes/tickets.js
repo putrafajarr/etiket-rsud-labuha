@@ -25,24 +25,70 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
 
-// Helper to generate ticket number: TKT-202611-0001
+// Helper to generate ticket number: TKT-202611-0001 (uses max existing sequence to avoid collisions after deletes)
 async function generateTicketNumber() {
   const now = new Date();
   const yearMonth = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0');
-  const countRow = await query.get(`
-    SELECT COUNT(*) as count FROM tickets 
+  const existing = await query.all(`
+    SELECT ticket_no FROM tickets
     WHERE ticket_no LIKE 'TKT-${yearMonth}-%'
+    ORDER BY id DESC
+    LIMIT 30
   `);
-  const seq = (countRow.count + 1).toString().padStart(4, '0');
-  return `TKT-${yearMonth}-${seq}`;
+  let maxSeq = 0;
+  (existing || []).forEach(r => {
+    if (r.ticket_no) {
+      const parts = String(r.ticket_no).split('-');
+      const seqNum = parseInt(parts[2], 10);
+      if (!Number.isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+    }
+  });
+  return `TKT-${yearMonth}-${String(maxSeq + 1).padStart(4, '0')}`;
 }
 
-// GET all tickets with filtering
+// GET all tickets with filtering (supports ?digest=1, ?summary=1, and ?photosOnly=1&ids=...)
 router.get('/', async (req, res) => {
   try {
-    const { status, priority, roomId, categoryId, search, techId } = req.query;
+    const { status, priority, roomId, categoryId, search, techId, summary, digest, photosOnly, ids } = req.query;
+
+    if (photosOnly === '1') {
+      const idList = String(ids || '')
+        .split(',')
+        .map(v => parseInt(v, 10))
+        .filter(n => Number.isInteger(n) && n > 0)
+        .slice(0, 100);
+      if (idList.length === 0) return res.json([]);
+      const rows = await query.all(
+        `SELECT id, photo_url, proof_photo_url FROM tickets WHERE id IN (${idList.join(',')})`
+      );
+      return res.json(rows);
+    }
+
+    let selectCols = `
+      t.*, u.name as tech_name, u.phone as tech_phone,
+      CASE WHEN t.photo_url IS NOT NULL AND t.photo_url != '' THEN 1 ELSE 0 END as has_photo,
+      CASE WHEN t.proof_photo_url IS NOT NULL AND t.proof_photo_url != '' THEN 1 ELSE 0 END as has_proof
+    `;
+    if (digest === '1') {
+      selectCols = 't.id, t.status, t.assigned_to, t.assigned_to_name, t.priority, t.updated_at, t.title, t.created_at';
+    } else if (summary === '1') {
+      selectCols = `
+        t.id, t.ticket_no, t.room_id, t.room_name, t.category_id, t.category_name,
+        t.reporter_name, t.reporter_phone, t.reporter_email, t.reporter_role,
+        t.title, t.description, t.priority, t.channel, t.status,
+        t.assigned_to, t.assigned_to_name, t.assigned_at,
+        t.target_response_time, t.actual_response_time, t.target_resolve_time, t.actual_resolve_time,
+        t.sla_status, t.pending_reason, t.resolution_notes, t.improvement_suggestion,
+        t.wa_sent_at, t.satisfaction_rating, t.satisfaction_feedback,
+        t.created_at, t.updated_at, t.resolved_at, t.closed_at,
+        u.name as tech_name, u.phone as tech_phone,
+        CASE WHEN t.photo_url IS NOT NULL AND t.photo_url != '' THEN 1 ELSE 0 END as has_photo,
+        CASE WHEN t.proof_photo_url IS NOT NULL AND t.proof_photo_url != '' THEN 1 ELSE 0 END as has_proof
+      `;
+    }
+
     let sql = `
-      SELECT t.*, u.name as tech_name, u.phone as tech_phone
+      SELECT ${selectCols}
       FROM tickets t
       LEFT JOIN users u ON t.assigned_to = u.id
       WHERE 1=1
@@ -90,9 +136,9 @@ router.get('/latest-alert', async (req, res) => {
   try {
     const sinceId = parseInt(req.query.sinceId, 10);
     const maxRow = await query.get('SELECT MAX(id) as maxId FROM tickets');
-    const latestId = maxRow && maxRow.maxId ? maxRow.maxId : 0;
+    const latestId = Number(maxRow && (maxRow.maxId ?? maxRow.maxid)) || 0;
     const openRow = await query.get("SELECT COUNT(*) as openCount FROM tickets WHERE status = 'open'");
-    const openCount = openRow ? openRow.openCount : 0;
+    const openCount = Number(openRow && (openRow.openCount ?? openRow.opencount)) || 0;
 
     let newTickets = [];
     if (!Number.isNaN(sinceId) && sinceId >= 0) {
@@ -123,21 +169,23 @@ router.get('/latest-alert', async (req, res) => {
 router.get('/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
+    const cleanId = String(identifier || '').trim();
+    const isNumeric = /^\d+$/.test(cleanId);
     let ticket;
-    if (identifier.startsWith('TKT-')) {
-      ticket = await query.get(`
-        SELECT t.*, u.name as tech_name, u.phone as tech_phone
-        FROM tickets t
-        LEFT JOIN users u ON t.assigned_to = u.id
-        WHERE t.ticket_no = ?
-      `, [identifier]);
-    } else {
+    if (isNumeric) {
       ticket = await query.get(`
         SELECT t.*, u.name as tech_name, u.phone as tech_phone
         FROM tickets t
         LEFT JOIN users u ON t.assigned_to = u.id
         WHERE t.id = ?
-      `, [identifier]);
+      `, [parseInt(cleanId, 10)]);
+    } else {
+      ticket = await query.get(`
+        SELECT t.*, u.name as tech_name, u.phone as tech_phone
+        FROM tickets t
+        LEFT JOIN users u ON t.assigned_to = u.id
+        WHERE LOWER(t.ticket_no) = LOWER(?)
+      `, [cleanId]);
     }
 
     if (!ticket) {

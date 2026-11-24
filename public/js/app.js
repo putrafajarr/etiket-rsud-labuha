@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.12';
+const APP_WEB_VERSION = '4.13';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -21,6 +21,94 @@ let categoryChartInstance = null;
 let roomChartInstance = null;
 let filterTimeout = null;
 let appSettings = {};
+
+window._ticketPhotoCache = window._ticketPhotoCache || {};
+
+function normalizeWaPhone(rawPhone) {
+  let clean = String(rawPhone || '').replace(/\D/g, '');
+  if (!clean) return '';
+  if (clean.startsWith('0')) return '62' + clean.substring(1);
+  if (clean.startsWith('8') && clean.length >= 8) return '62' + clean;
+  return clean;
+}
+
+function cacheTicketPhotos(ticket) {
+  if (!ticket || !ticket.id) return ticket;
+  const tid = Number(ticket.id);
+  const existing = window._ticketPhotoCache[tid] || {};
+  const photo_url = ticket.photo_url || existing.photo_url || null;
+  const proof_photo_url = ticket.proof_photo_url || existing.proof_photo_url || null;
+  if (photo_url || proof_photo_url) {
+    window._ticketPhotoCache[tid] = { photo_url, proof_photo_url };
+  }
+  if (photo_url) {
+    ticket.photo_url = photo_url;
+    ticket.has_photo = true;
+  }
+  if (proof_photo_url) {
+    ticket.proof_photo_url = proof_photo_url;
+    ticket.has_proof = true;
+  }
+  return ticket;
+}
+
+function applyCachedPhotosToTicket(ticket) {
+  if (!ticket || !ticket.id) return ticket;
+  const cached = window._ticketPhotoCache[Number(ticket.id)];
+  if (cached) {
+    if (!ticket.photo_url && cached.photo_url) {
+      ticket.photo_url = cached.photo_url;
+      ticket.has_photo = true;
+    }
+    if (!ticket.proof_photo_url && cached.proof_photo_url) {
+      ticket.proof_photo_url = cached.proof_photo_url;
+      ticket.has_proof = true;
+    }
+  }
+  return ticket;
+}
+
+function applyCachedPhotosToList(rows) {
+  return (rows || []).map(row => {
+    cacheTicketPhotos(row);
+    return applyCachedPhotosToTicket(row);
+  });
+}
+
+async function fetchTicketPhotosOnDemand(ticketIds) {
+  const uniqueIds = Array.from(new Set((ticketIds || []).map(Number).filter(id => Number.isInteger(id) && id > 0)));
+  if (uniqueIds.length === 0) return;
+
+  for (let i = 0; i < uniqueIds.length; i += 15) {
+    const batch = uniqueIds.slice(i, i + 15);
+    const res = await fetch(`/api/tickets?photosOnly=1&ids=${encodeURIComponent(batch.join(','))}`);
+    if (!res || !res.ok) continue;
+    const rows = await res.json();
+    if (!Array.isArray(rows)) continue;
+    rows.forEach(p => {
+      cacheTicketPhotos(p);
+      const match = (allTickets || []).find(item => Number(item.id) === Number(p.id));
+      if (match) applyCachedPhotosToTicket(match);
+      if (selectedTicketForModal && Number(selectedTicketForModal.id) === Number(p.id)) {
+        applyCachedPhotosToTicket(selectedTicketForModal);
+      }
+    });
+  }
+}
+
+async function ensureTicketPhotosForExport(tickets) {
+  const list = Array.isArray(tickets) ? tickets : [];
+  const missingIds = [];
+  list.forEach(t => {
+    applyCachedPhotosToTicket(t);
+    const needsPhoto = (t.has_photo && !t.photo_url) || (t.has_proof && !t.proof_photo_url);
+    if (needsPhoto) missingIds.push(Number(t.id));
+  });
+  if (missingIds.length > 0) {
+    await fetchTicketPhotosOnDemand(missingIds);
+    list.forEach(t => applyCachedPhotosToTicket(t));
+  }
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   initMobileNativeBridge();
@@ -694,211 +782,228 @@ let isInitialTechsRan = false;
 
 let isSyncInProgress = false;
 
-async function runRealtimeSyncCycle() {
+async function runRealtimeSyncCycle(forceFullMeta = false) {
   if (isSyncInProgress) return;
   isSyncInProgress = true;
+  window._syncMetaCycle = (window._syncMetaCycle || 0) + 1;
 
   try {
     // -------------------------------------------------------------------------
-    // 1. SINKRONISASI TIKET REAL-TIME (Tambah, Edit, Disposisi, Status, Hapus)
+    // 1. SINKRONISASI TIKET REAL-TIME HEMAT KUOTA (Digest ~4 KB dulu, summary ~17 KB hanya saat berubah)
     // -------------------------------------------------------------------------
-    const res = await smartFetch('/api/tickets');
-    if (res && res.ok) {
-      const freshTickets = await res.json();
-      if (Array.isArray(freshTickets)) {
-        const currentSig = freshTickets.map(t =>
+    let ticketsChangedThisCycle = false;
+    const digestRes = await smartFetch('/api/tickets?digest=1');
+    if (digestRes && digestRes.ok) {
+      const digestRows = await digestRes.json();
+      if (Array.isArray(digestRows)) {
+        const currentSig = digestRows.map(t =>
           `${t.id}:${t.status}:${t.assigned_to || ''}:${t.assigned_to_name || ''}:${t.priority}:${t.updated_at || ''}:${t.title || ''}`
         ).join('|');
 
         if (!isInitialSyncRan) {
           lastSyncSignature = currentSig;
-          knownTicketIds = new Set(freshTickets.map(t => t.id));
-          allTickets = freshTickets;
+          knownTicketIds = new Set(digestRows.map(t => t.id));
           isInitialSyncRan = true;
-        } else if (currentSig !== lastSyncSignature) {
-          const currentIds = new Set(freshTickets.map(t => t.id));
-
-          // A. Tiket Baru Ditambahkan di Supabase
-          const newTickets = freshTickets.filter(t => !knownTicketIds.has(t.id));
-          if (newTickets.length > 0) {
-            newTickets.forEach(newest => {
-              if (window.soundAlert) {
-                if (newest.priority === 'critical' || newest.priority === 'high') {
-                  window.soundAlert.playEmergency();
-                } else {
-                  window.soundAlert.playChime();
-                }
+          if (!window._ticketsLoadedOnce) {
+            const sumRes = await smartFetch('/api/tickets?summary=1');
+            if (sumRes && sumRes.ok) {
+              const initTickets = await sumRes.json();
+              if (Array.isArray(initTickets)) {
+                allTickets = applyCachedPhotosToList(initTickets);
+                window._ticketsLoadedOnce = true;
               }
-              notifyNativeOrBrowser(newest);
-              Swal.fire({
-                toast: true,
-                position: 'top-end',
-                icon: newest.priority === 'critical' ? 'error' : 'info',
-                title: `${newest.priority === 'critical' ? '🚨 TIKET KRITIS: ' : '🎫 Tiket Baru: '}${newest.room_name || 'Ruangan RSUD'}`,
-                text: `${newest.ticket_no || ''} - ${newest.title}`,
-                showConfirmButton: false,
-                timer: 5000,
-                timerProgressBar: true
-              });
-            });
-          }
-
-          // B. Tiket Dihapus di Supabase
-          const deletedTickets = (allTickets || []).filter(oldT => !currentIds.has(oldT.id));
-          if (deletedTickets.length > 0) {
-            deletedTickets.forEach(dt => {
-              Swal.fire({
-                toast: true,
-                position: 'top-end',
-                icon: 'warning',
-                title: '🗑️ Tiket Dihapus di Supabase',
-                text: `Tiket #${dt.ticket_no || dt.id} (${dt.room_name || 'Ruangan'}) telah dihapus dari sistem`,
-                showConfirmButton: false,
-                timer: 4500,
-                timerProgressBar: true
-              });
-            });
-            if (selectedTicketForModal && deletedTickets.some(dt => dt.id === selectedTicketForModal.id)) {
-              closeTicketModal();
             }
           }
+        } else if (currentSig !== lastSyncSignature) {
+          ticketsChangedThisCycle = true;
+          const sumRes = await smartFetch('/api/tickets?summary=1');
+          if (sumRes && sumRes.ok) {
+            const freshTickets = await sumRes.json();
+            if (Array.isArray(freshTickets)) {
+              const mergedFresh = applyCachedPhotosToList(freshTickets);
+              const currentIds = new Set(mergedFresh.map(t => t.id));
 
-          // C. Perubahan Status, Disposisi / Klaim Teknisi
-          freshTickets.forEach(ft => {
-            const oldT = (allTickets || []).find(ot => ot.id === ft.id);
-            if (oldT) {
-              // Disposisi / Kunci Tiket Berpindah
-              if (ft.assigned_to !== oldT.assigned_to) {
-                const isMe = activeUser && (ft.assigned_to === activeUser.id || ft.assigned_to_name === activeUser.name);
-                if (window.soundAlert) window.soundAlert.playChime();
-                if (isMe) {
-                  notifyNativeGeneric(
-                    `📋 Disposisi untuk Anda: ${ft.room_name || 'Ruangan RSUD'}`,
-                    `${ft.ticket_no || ''} ditugaskan kepada Anda (${ft.title || ''})`,
-                    {
-                      ticketId: ft.id,
-                      ticketNo: ft.ticket_no,
-                      roomName: ft.room_name,
-                      status: ft.status || 'in_progress',
-                      assignedTo: ft.assigned_to || 0,
-                      eventType: 'assigned'
+              // A. Tiket Baru Ditambahkan di Supabase
+              const newTickets = mergedFresh.filter(t => !knownTicketIds.has(t.id));
+              if (newTickets.length > 0) {
+                newTickets.forEach(newest => {
+                  if (window.soundAlert) {
+                    if (newest.priority === 'critical' || newest.priority === 'high') {
+                      window.soundAlert.playEmergency();
+                    } else {
+                      window.soundAlert.playChime();
                     }
-                  );
+                  }
+                  notifyNativeOrBrowser(newest);
                   Swal.fire({
                     toast: true,
                     position: 'top-end',
-                    icon: 'info',
-                    title: `📋 Tiket Dialihkan ke Anda: ${ft.room_name}`,
-                    text: `${ft.ticket_no} telah didelegasikan kepada Anda oleh Koordinator`,
+                    icon: newest.priority === 'critical' ? 'error' : 'info',
+                    title: `${newest.priority === 'critical' ? '🚨 TIKET KRITIS: ' : '🎫 Tiket Baru: '}${newest.room_name || 'Ruangan RSUD'}`,
+                    text: `${newest.ticket_no || ''} - ${newest.title}`,
                     showConfirmButton: false,
                     timer: 5000,
                     timerProgressBar: true
                   });
-                } else {
-                  if (ft.assigned_to) {
-                    notifyNativeGeneric(
-                      `👨‍🔧 Disposisi Tiket: ${ft.room_name || 'Ruangan RSUD'}`,
-                      `${ft.ticket_no || ''} ditugaskan ke ${ft.assigned_to_name || 'Teknisi IT'}`,
-                      {
-                        ticketId: ft.id,
-                        ticketNo: ft.ticket_no,
-                        roomName: ft.room_name,
-                        status: ft.status || 'in_progress',
-                        assignedTo: ft.assigned_to || 0,
-                        eventType: 'assigned'
+                });
+              }
+
+              // B. Tiket Dihapus di Supabase
+              const deletedTickets = (allTickets || []).filter(oldT => !currentIds.has(oldT.id));
+              if (deletedTickets.length > 0) {
+                deletedTickets.forEach(dt => {
+                  Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'warning',
+                    title: '🗑️ Tiket Dihapus di Supabase',
+                    text: `Tiket #${dt.ticket_no || dt.id} (${dt.room_name || 'Ruangan'}) telah dihapus dari sistem`,
+                    showConfirmButton: false,
+                    timer: 4500,
+                    timerProgressBar: true
+                  });
+                });
+                if (selectedTicketForModal && deletedTickets.some(dt => dt.id === selectedTicketForModal.id)) {
+                  closeTicketModal();
+                }
+              }
+
+              // C. Perubahan Status, Disposisi / Klaim Teknisi
+              mergedFresh.forEach(ft => {
+                const oldT = (allTickets || []).find(ot => ot.id === ft.id);
+                if (oldT) {
+                  if (ft.assigned_to !== oldT.assigned_to) {
+                    const isMe = activeUser && (ft.assigned_to === activeUser.id || ft.assigned_to_name === activeUser.name);
+                    if (window.soundAlert) window.soundAlert.playChime();
+                    if (isMe) {
+                      notifyNativeGeneric(
+                        `📋 Disposisi untuk Anda: ${ft.room_name || 'Ruangan RSUD'}`,
+                        `${ft.ticket_no || ''} ditugaskan kepada Anda (${ft.title || ''})`,
+                        {
+                          ticketId: ft.id,
+                          ticketNo: ft.ticket_no,
+                          roomName: ft.room_name,
+                          status: ft.status || 'in_progress',
+                          assignedTo: ft.assigned_to || 0,
+                          eventType: 'assigned'
+                        }
+                      );
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `📋 Tiket Dialihkan ke Anda: ${ft.room_name}`,
+                        text: `${ft.ticket_no} telah didelegasikan kepada Anda oleh Koordinator`,
+                        showConfirmButton: false,
+                        timer: 5000,
+                        timerProgressBar: true
+                      });
+                    } else {
+                      if (ft.assigned_to) {
+                        notifyNativeGeneric(
+                          `👨‍🔧 Disposisi Tiket: ${ft.room_name || 'Ruangan RSUD'}`,
+                          `${ft.ticket_no || ''} ditugaskan ke ${ft.assigned_to_name || 'Teknisi IT'}`,
+                          {
+                            ticketId: ft.id,
+                            ticketNo: ft.ticket_no,
+                            roomName: ft.room_name,
+                            status: ft.status || 'in_progress',
+                            assignedTo: ft.assigned_to || 0,
+                            eventType: 'assigned'
+                          }
+                        );
                       }
-                    );
-                  }
-                  Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'info',
-                    title: `🔒 Tiket Diambil: ${ft.room_name}`,
-                    text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Teknisi lain'}`,
-                    showConfirmButton: false,
-                    timer: 4500,
-                    timerProgressBar: true
-                  });
-                }
-              }
-
-              // Status Berubah
-              if (ft.status !== oldT.status) {
-                if (ft.status === 'resolved' || ft.status === 'closed') {
-                  if (window.soundAlert) window.soundAlert.playSuccess();
-                  notifyNativeGeneric(
-                    `✅ Tiket Selesai: ${ft.room_name || 'Ruangan RSUD'}`,
-                    `${ft.ticket_no || ''} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
-                    {
-                      ticketId: ft.id,
-                      ticketNo: ft.ticket_no,
-                      roomName: ft.room_name,
-                      status: ft.status,
-                      assignedTo: ft.assigned_to || 0,
-                      eventType: 'resolved'
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `🔒 Tiket Diambil: ${ft.room_name}`,
+                        text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Teknisi lain'}`,
+                        showConfirmButton: false,
+                        timer: 4500,
+                        timerProgressBar: true
+                      });
                     }
-                  );
-                  Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'success',
-                    title: `✅ Tiket Selesai: ${ft.room_name}`,
-                    text: `${ft.ticket_no} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
-                    showConfirmButton: false,
-                    timer: 4500,
-                    timerProgressBar: true
-                  });
-                } else if (ft.status === 'in_progress' && (oldT.status === 'open' || oldT.status === 'assigned')) {
-                  Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'info',
-                    title: `🔧 Sedang Diproses: ${ft.room_name}`,
-                    text: `${ft.ticket_no} sedang diproses oleh ${ft.assigned_to_name || 'Tim IT'}`,
-                    showConfirmButton: false,
-                    timer: 4000
-                  });
-                } else if (ft.status === 'assigned' && oldT.status === 'open') {
-                  Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'info',
-                    title: `👤 Diambil / Ditugaskan: ${ft.room_name}`,
-                    text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Tim IT'}`,
-                    showConfirmButton: false,
-                    timer: 3800
-                  });
-                } else {
-                  Swal.fire({
-                    toast: true,
-                    position: 'top-end',
-                    icon: 'info',
-                    title: `🔄 Status Tiket Diperbarui: ${ft.room_name}`,
-                    text: `${ft.ticket_no} status: ${ft.status.toUpperCase()}`,
-                    showConfirmButton: false,
-                    timer: 3500
-                  });
+                  }
+
+                  if (ft.status !== oldT.status) {
+                    if (ft.status === 'resolved' || ft.status === 'closed') {
+                      if (window.soundAlert) window.soundAlert.playSuccess();
+                      notifyNativeGeneric(
+                        `✅ Tiket Selesai: ${ft.room_name || 'Ruangan RSUD'}`,
+                        `${ft.ticket_no || ''} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                        {
+                          ticketId: ft.id,
+                          ticketNo: ft.ticket_no,
+                          roomName: ft.room_name,
+                          status: ft.status,
+                          assignedTo: ft.assigned_to || 0,
+                          eventType: 'resolved'
+                        }
+                      );
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: `✅ Tiket Selesai: ${ft.room_name}`,
+                        text: `${ft.ticket_no} telah diselesaikan oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                        showConfirmButton: false,
+                        timer: 4500,
+                        timerProgressBar: true
+                      });
+                    } else if (ft.status === 'in_progress' && (oldT.status === 'open' || oldT.status === 'assigned')) {
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `🔧 Sedang Diproses: ${ft.room_name}`,
+                        text: `${ft.ticket_no} sedang diproses oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                        showConfirmButton: false,
+                        timer: 4000
+                      });
+                    } else if (ft.status === 'assigned' && oldT.status === 'open') {
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `👤 Diambil / Ditugaskan: ${ft.room_name}`,
+                        text: `${ft.ticket_no} diambil oleh ${ft.assigned_to_name || 'Tim IT'}`,
+                        showConfirmButton: false,
+                        timer: 3800
+                      });
+                    } else {
+                      Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'info',
+                        title: `🔄 Status Tiket Diperbarui: ${ft.room_name}`,
+                        text: `${ft.ticket_no} status: ${ft.status.toUpperCase()}`,
+                        showConfirmButton: false,
+                        timer: 3500
+                      });
+                    }
+                  }
+                }
+              });
+
+              allTickets = mergedFresh;
+              window._ticketsLoadedOnce = true;
+              lastSyncSignature = currentSig;
+              knownTicketIds = currentIds;
+
+              renderTickets();
+              loadStats();
+              loadTechnicianTickets();
+              if (currentTab === 'reports') loadTechnicians();
+
+              // Refresh modal live jika sedang dibuka
+              if (selectedTicketForModal) {
+                const up = mergedFresh.find(t => t.id === selectedTicketForModal.id);
+                if (up && (up.status !== selectedTicketForModal.status || up.assigned_to !== selectedTicketForModal.assigned_to)) {
+                  selectedTicketForModal = up;
+                  openTicketModal(up.id);
                 }
               }
-            }
-          });
-
-          allTickets = freshTickets;
-          window._ticketsLoadedOnce = true;
-          lastSyncSignature = currentSig;
-          knownTicketIds = currentIds;
-
-          renderTickets();
-          loadStats();
-          loadTechnicianTickets();
-          if (currentTab === 'reports') loadTechnicians();
-
-          // Refresh modal live jika sedang dibuka
-          if (selectedTicketForModal) {
-            const up = freshTickets.find(t => t.id === selectedTicketForModal.id);
-            if (up && (up.status !== selectedTicketForModal.status || up.assigned_to !== selectedTicketForModal.assigned_to)) {
-              selectedTicketForModal = up;
-              openTicketModal(up.id);
             }
           }
         } else {
@@ -914,9 +1019,11 @@ async function runRealtimeSyncCycle() {
     }
 
     // -------------------------------------------------------------------------
-    // 2. SINKRONISASI RUANGAN / UNIT REAL-TIME (Tambah, Edit, Hapus)
+    // 2 & 3. SINKRONISASI RUANGAN & PETUGAS IT (Hanya saat inisial, tiket berubah, sync manual, atau tiap ~48 detik)
     // -------------------------------------------------------------------------
-    const roomsRes = await smartFetch('/api/rooms');
+    const shouldSyncMeta = forceFullMeta || !isInitialRoomsRan || !isInitialTechsRan || ticketsChangedThisCycle || (window._syncMetaCycle % 6 === 0);
+    if (shouldSyncMeta) {
+      const roomsRes = await smartFetch('/api/rooms');
     if (roomsRes && roomsRes.ok) {
       const freshRooms = await roomsRes.json();
       if (Array.isArray(freshRooms)) {
@@ -1032,6 +1139,7 @@ async function runRealtimeSyncCycle() {
         }
       }
     }
+    }
   } catch (err) {
     console.debug('[Real-Time Sync Error]:', err);
   } finally {
@@ -1041,11 +1149,11 @@ async function runRealtimeSyncCycle() {
 
 function startAutoSync() {
   if (autoSyncTimer) clearInterval(autoSyncTimer);
-  // Interval cerdas: 5 detik dan HANYA berjalan jika aplikasi / layar sedang aktif dilihat!
+  // Interval cerdas & hemat kuota: 8 detik dan HANYA berjalan jika aplikasi / layar sedang aktif dilihat!
   autoSyncTimer = setInterval(() => {
     if (document.hidden) return; // Menghemat kuota saat HP terkunci atau tab diminimalkan
     runRealtimeSyncCycle();
-  }, 5000);
+  }, 8000);
 }
 
 // Saat user kembali membuka tab / menghidupkan layar HP, lakukan sinkronisasi instan seketika!
@@ -1063,7 +1171,7 @@ async function triggerManualSync() {
   const icon = document.getElementById('iconManualSync');
   if (icon) icon.classList.add('animate-spin');
 
-  await runRealtimeSyncCycle();
+  await runRealtimeSyncCycle(true);
   await Promise.all([loadStats(), loadAppSettings()]);
 
   setTimeout(() => {
@@ -1435,13 +1543,13 @@ function showAllTicketsWithBacklog() {
   }
 }
 
-// Load Tickets (keeps allTickets unfiltered; toolbar date & field filters apply cleanly in real time)
+// Load Tickets (uses lightweight summary mode to avoid re-downloading base64 photos)
 async function loadTickets() {
   try {
-    const res = await fetch('/api/tickets');
+    const res = await fetch('/api/tickets?summary=1');
     const rows = await res.json();
     if (res.ok && Array.isArray(rows)) {
-      allTickets = rows;
+      allTickets = applyCachedPhotosToList(rows);
       window._ticketsLoadedOnce = true;
     }
     renderTickets();
@@ -1572,8 +1680,8 @@ function renderTickets() {
     const safeCategory = esc(t.category_name);
     const safeReporter = esc(t.reporter_name);
     const safeTechName = esc(t.assigned_to_name);
-    const hasPhoto = Boolean(t.photo_url);
-    const hasProof = Boolean(t.proof_photo_url);
+    const hasPhoto = Boolean(t.photo_url || t.has_photo);
+    const hasProof = Boolean(t.proof_photo_url || t.has_proof);
 
     const priorityClasses = {
       critical: 'ticket-critical bg-rose-50/40 border-rose-200',
@@ -2639,8 +2747,12 @@ async function openTicketModal(ticketId) {
     if (!res.ok || !data || !data.ticket) {
       throw new Error((data && data.error) || 'Data tiket tidak ditemukan');
     }
-    selectedTicketForModal = data.ticket;
+    selectedTicketForModal = cacheTicketPhotos(data.ticket);
     selectedTicketLogs = data.logs || [];
+    const tIdx = (allTickets || []).findIndex(item => Number(item.id) === Number(selectedTicketForModal.id));
+    if (tIdx !== -1) {
+      allTickets[tIdx] = Object.assign({}, allTickets[tIdx], selectedTicketForModal);
+    }
 
     // Ensure custom IT action buttons are synchronized from settings
     if (!appSettings || !Object.prototype.hasOwnProperty.call(appSettings, 'it_action_buttons')) {
@@ -3225,7 +3337,7 @@ async function submitTicketStatusChange(ticket, status, opts = {}) {
   if (!res.ok) {
     throw new Error(resData.error || 'Gagal memperbarui status tiket');
   }
-  return resData.ticket;
+  return cacheTicketPhotos(resData.ticket);
 }
 
 async function executeItActionOnTicket(ticket, btn, opts = {}) {
@@ -3275,20 +3387,13 @@ async function executeItActionOnTicket(ticket, btn, opts = {}) {
     return false;
   }
 
-  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url);
+  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url || ticket.has_proof || ticket.has_photo);
   const message = renderActionWaTemplate(btn.template, ticket, liveNotes, liveSuggestion, {
     hasPhoto,
     fallbackType: btn.key
   });
 
-  let cleanPhone = String(ticket.reporter_phone || '').replace(/\D/g, '');
-  if (cleanPhone.startsWith('0')) {
-    cleanPhone = '62' + cleanPhone.substring(1);
-  } else if (cleanPhone.startsWith('8') && cleanPhone.length >= 8) {
-    cleanPhone = '62' + cleanPhone;
-  } else if (cleanPhone.startsWith('8') && cleanPhone.length >= 8) {
-    cleanPhone = '62' + cleanPhone;
-  }
+  const cleanPhone = normalizeWaPhone(ticket.reporter_phone);
   const hasPhone = cleanPhone.length >= 6;
   const waUrl = hasPhone ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}` : '';
   const nativePlugin = window.Capacitor?.Plugins?.EtiketNative;
@@ -3849,7 +3954,7 @@ async function fileToImageDataUrl(file) {
   if (!file) return '';
   if (typeof window.compressImageFile === 'function') {
     try {
-      return await window.compressImageFile(file, { maxDim: 1024, quality: 0.72, maxLength: 700000 });
+      return await window.compressImageFile(file, { maxDim: 960, quality: 0.70, maxLength: 450000 });
     } catch (e) { }
   }
   return new Promise((resolve) => {
@@ -3865,7 +3970,26 @@ async function resolveImageDataUrlForShare(ticket, proofFile) {
     const dataUrl = await fileToImageDataUrl(proofFile);
     if (dataUrl) return dataUrl;
   }
-  const srcUrl = ticket?.proof_photo_url || ticket?.photo_url || '';
+  if (ticket) {
+    applyCachedPhotosToTicket(ticket);
+  }
+  let srcUrl = ticket?.proof_photo_url || ticket?.photo_url || '';
+  if (!srcUrl && ticket?.id && (ticket.has_proof || ticket.has_photo)) {
+    try {
+      const detailRes = await fetch(`/api/tickets/${ticket.id}`);
+      if (detailRes && detailRes.ok) {
+        const detailData = await detailRes.json();
+        if (detailData && detailData.ticket) {
+          cacheTicketPhotos(detailData.ticket);
+          Object.assign(ticket, {
+            photo_url: detailData.ticket.photo_url || ticket.photo_url,
+            proof_photo_url: detailData.ticket.proof_photo_url || ticket.proof_photo_url
+          });
+          srcUrl = ticket.proof_photo_url || ticket.photo_url || '';
+        }
+      }
+    } catch (e) { }
+  }
   if (!srcUrl) return '';
   if (String(srcUrl).startsWith('data:image/')) return srcUrl;
   try {
@@ -3972,15 +4096,12 @@ async function dispatchDirectWa(ticket, type, liveNotes, liveSuggestion) {
     return false;
   }
 
-  let cleanPhone = String(reporterPhone).replace(/\D/g, '');
-  if (cleanPhone.startsWith('0')) {
-    cleanPhone = '62' + cleanPhone.substring(1);
-  }
+  const cleanPhone = normalizeWaPhone(reporterPhone);
 
   const inThisModal = selectedTicketForModal && Number(selectedTicketForModal.id) === Number(ticket.id);
   const proofInput = inThisModal ? document.getElementById('modalProofPhoto') : null;
   const selectedProofFile = proofInput && proofInput.files && proofInput.files[0] ? proofInput.files[0] : null;
-  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url);
+  const hasPhoto = Boolean(selectedProofFile || ticket.proof_photo_url || ticket.photo_url || ticket.has_proof || ticket.has_photo);
 
   const message = buildWhatsAppMessage(ticket, type, liveNotes, liveSuggestion, { hasPhoto });
   const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
@@ -4099,8 +4220,7 @@ async function sendWaPhotoDirect() {
   const message = buildWhatsAppMessage(t, 'done', liveNotes, liveSuggestion, { hasPhoto: true });
   await copyTextSafe(message);
 
-  let cleanPhone = String(t.reporter_phone || '').replace(/\D/g, '');
-  if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.substring(1);
+  const cleanPhone = normalizeWaPhone(t.reporter_phone);
 
   const mimeMatch = imgDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/i);
   const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
@@ -4633,10 +4753,13 @@ async function exportExcel() {
   Swal.fire({ title: 'Menyiapkan File Excel...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
 
   try {
-    await loadAppSettings();
-    if (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function') {
-      await window.ensureScriptLoaded('/js/exceljs.min.js?v=4.12');
-    }
+    await Promise.all([
+      loadAppSettings(),
+      ensureTicketPhotosForExport(tickets),
+      (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function')
+        ? window.ensureScriptLoaded('/js/exceljs.min.js?v=4.13')
+        : Promise.resolve()
+    ]);
     if (!window.ExcelJS) {
       throw new Error('Komponen pembuat Excel gagal dimuat');
     }
@@ -4788,7 +4911,7 @@ async function exportExcel() {
   }
 }
 
-// Print Official HTML / PDF (Refreshes latest signers then renders cleanly)
+// Print Official HTML / PDF (Refreshes latest signers & fetches period photos on demand)
 async function printOfficialReport() {
   const start = document.getElementById('reportStartDate')?.value || '';
   const end = document.getElementById('reportEndDate')?.value || '';
@@ -4799,10 +4922,30 @@ async function printOfficialReport() {
 
   if (modal && frame) {
     modal.classList.remove('hidden');
-    await loadAppSettings();
-    const html = generateClientPrintHtml(start, end);
-    frame.srcdoc = html;
-    if (loading) loading.classList.add('hidden');
+    frame.srcdoc = '';
+    if (loading) loading.classList.remove('hidden');
+    try {
+      let ticketsForPeriod = (allTickets || []).slice();
+      if (start) {
+        const sTime = new Date(start + 'T00:00:00').getTime();
+        ticketsForPeriod = ticketsForPeriod.filter(t => new Date(t.created_at).getTime() >= sTime);
+      }
+      if (end) {
+        const eTime = new Date(end + 'T23:59:59').getTime();
+        ticketsForPeriod = ticketsForPeriod.filter(t => new Date(t.created_at).getTime() <= eTime);
+      }
+      await Promise.all([
+        loadAppSettings(),
+        ensureTicketPhotosForExport(ticketsForPeriod)
+      ]);
+      const html = generateClientPrintHtml(start, end);
+      frame.srcdoc = html;
+    } catch (err) {
+      console.error('Print report error:', err);
+      Swal.fire('Gagal Menyiapkan Cetak', err.message || 'Gagal memuat lampiran laporan.', 'error');
+    } finally {
+      if (loading) loading.classList.add('hidden');
+    }
   } else {
     let url = '/api/reports/print-html';
     const params = [];
@@ -5016,7 +5159,7 @@ function maybeShowWeeklyBackupReminder() {
   try {
     if (sessionStorage.getItem('etiket_backup_reminded') === '1') return;
     if (appSettings?.auto_backup_reminder === '0') return;
-    let user = (typeof currentUser !== 'undefined' && currentUser) ? currentUser : null;
+    let user = (typeof activeUser !== 'undefined' && activeUser) ? activeUser : null;
     if (!user) {
       try { user = JSON.parse(localStorage.getItem('etiket_cached_user') || 'null'); } catch (e) { }
     }
