@@ -1,5 +1,5 @@
 // SIM-ETIKET RSUD LABUHA - Core Application Controller
-const APP_WEB_VERSION = '4.13';
+const APP_WEB_VERSION = '4.14';
 let latestServerVersionInfo = null;
 let updateCheckInFlight = false;
 
@@ -4757,7 +4757,7 @@ async function exportExcel() {
       loadAppSettings(),
       ensureTicketPhotosForExport(tickets),
       (!window.ExcelJS && typeof window.ensureScriptLoaded === 'function')
-        ? window.ensureScriptLoaded('/js/exceljs.min.js?v=4.13')
+        ? window.ensureScriptLoaded('/js/exceljs.min.js?v=4.14')
         : Promise.resolve()
     ]);
     if (!window.ExcelJS) {

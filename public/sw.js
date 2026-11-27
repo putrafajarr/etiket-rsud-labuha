@@ -1,24 +1,47 @@
-const CACHE_NAME = 'etiket-rsud-labuha-v17';
+const CACHE_NAME = 'etiket-rsud-labuha-v18';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/lapor.html',
   '/track.html',
   '/qrcodes.html',
-  '/css/custom.css?v=4.13',
-  '/js/supabase-client.js?v=4.13',
-  '/js/qrcode.min.js?v=4.13',
-  '/js/bcrypt.min.js?v=4.13',
-  '/js/sound.js?v=4.13',
-  '/js/app.js?v=4.13',
-  '/js/lapor.js?v=4.13',
+  '/css/custom.css?v=4.14',
+  '/js/supabase-client.js?v=4.14',
+  '/js/qrcode.min.js?v=4.14',
+  '/js/bcrypt.min.js?v=4.14',
+  '/js/sound.js?v=4.14',
+  '/js/app.js?v=4.14',
+  '/js/lapor.js?v=4.14',
   '/manifest.json'
 ];
 
+function cloneAsNonRedirectedResponse(res) {
+  const headers = new Headers(res.headers);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers
+  });
+}
+
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => console.log('SW cache err:', err));
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await Promise.allSettled(
+        ASSETS_TO_CACHE.map(async (assetUrl) => {
+          try {
+            const res = await fetch(assetUrl, { cache: 'no-cache' });
+            if (res && res.ok) {
+              const toCache = res.redirected ? cloneAsNonRedirectedResponse(res) : res;
+              await cache.put(assetUrl, toCache);
+            }
+          } catch (err) {
+            console.log('SW cache err:', assetUrl, err);
+          }
+        })
+      );
     })
   );
   self.skipWaiting();
@@ -50,11 +73,27 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  const reqForFetch = e.request.mode === 'navigate'
-    ? new Request(e.request.url, { cache: 'no-cache' })
-    : e.request;
+  if (e.request.mode === 'navigate') {
+    e.respondWith((async () => {
+      try {
+        const res = await fetch(e.request.url, { cache: 'no-cache' });
+        if (res && res.redirected) {
+          // Chrome/WebView rejects redirected responses for navigate requests
+          return cloneAsNonRedirectedResponse(res);
+        }
+        return res;
+      } catch (err) {
+        return (await caches.match(e.request, { ignoreSearch: true }))
+          || (await caches.match(new URL(e.request.url).pathname))
+          || (await caches.match('/'))
+          || Response.error();
+      }
+    })());
+    return;
+  }
+
   e.respondWith(
-    fetch(reqForFetch).catch(() => caches.match(e.request))
+    fetch(e.request).catch(() => caches.match(e.request))
   );
 });
 

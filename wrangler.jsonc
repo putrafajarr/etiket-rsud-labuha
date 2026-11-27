@@ -6,7 +6,9 @@
     "enabled": true
   },
   "assets": {
-    "directory": "public"
+    "directory": "public",
+    "html_handling": "none",
+    "not_found_handling": "none"
   }
 }
 

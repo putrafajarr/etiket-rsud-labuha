@@ -1,7 +1,7 @@
 {
-  "version": "4.13",
-  "releasedAt": "2026-11-24T11:20:00+09:00",
-  "notes": "Optimasi hemat kuota Supabase hingga 99% (sync ringan tanpa download foto berulang, foto dimuat saat buka detail/WA/cetak/Excel) serta perbaikan beberapa bug internal.",
+  "version": "4.14",
+  "releasedAt": "2026-11-27T14:40:00+09:00",
+  "notes": "Perbaikan halaman scan barcode QR (/lapor.html) agar tidak gagal muat (ERR_FAILED) saat Service Worker aktif di browser HP.",
   "minApkVersion": "1.6",
   "apkVersion": "1.6",
   "apkVersionCode": 7,
