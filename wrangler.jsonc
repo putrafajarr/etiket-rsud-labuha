@@ -1,12 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "etiket-rsud-labuha",
+  "main": "cloudflare-worker.mjs",
   "compatibility_date": "2026-11-13",
   "observability": {
     "enabled": true
   },
   "assets": {
     "directory": "public",
+    "binding": "ASSETS",
     "html_handling": "none",
     "not_found_handling": "none"
   }
